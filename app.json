@@ -2,6 +2,7 @@
   "expo": {
     "name": "ai-health-travel-assistant",
     "slug": "ai-health-travel-assistant",
+    "scheme": "ai-health-travel-assistant",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -25,6 +26,7 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": ["expo-router"]
   }
 }
