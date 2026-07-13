@@ -1,11 +1,16 @@
-import { SafeAreaView, Text } from "react-native";
+import { Center } from "@/components/ui/center";
+import { Text } from "@/components/ui/text";
+import { useQuery } from "convex/react";
+import { api } from "../convex/_generated/api";
 
 export default function HomeScreen() {
+  const message = useQuery(api.hello.hello);
+
   return (
-    <SafeAreaView className="flex-1 items-center justify-center bg-black">
+    <Center className="flex-1 bg-black">
       <Text className="text-2xl font-bold text-white">
-        AI Health Travel Assistant
+        {message ?? "Loading..."}
       </Text>
-    </SafeAreaView>
+    </Center>
   );
 }
