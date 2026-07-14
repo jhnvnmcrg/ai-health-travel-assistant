@@ -1,16 +1,16 @@
-import { Center } from "@/components/ui/center";
-import { Text } from "@/components/ui/text";
-import { useQuery } from "convex/react";
-import { api } from "../convex/_generated/api";
+import { Redirect } from "expo-router";
+import { useAuth } from "@clerk/expo";
 
-export default function HomeScreen() {
-  const message = useQuery(api.hello.hello);
+export default function Index() {
+  const { isSignedIn, isLoaded } = useAuth();
 
-  return (
-    <Center className="flex-1 bg-black">
-      <Text className="text-2xl font-bold text-white">
-        {message ?? "Loading..."}
-      </Text>
-    </Center>
-  );
+  if (!isLoaded) {
+    return null;
+  }
+
+  if (isSignedIn) {
+    return <Redirect href="/(protected)/home" />;
+  }
+
+  return <Redirect href="/(auth)/sign-in" />;
 }
