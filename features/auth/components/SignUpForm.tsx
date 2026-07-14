@@ -2,7 +2,6 @@ import React from "react";
 import { useAuth, useSignUp } from "@clerk/expo";
 import { type Href, Link, useRouter } from "expo-router";
 
-// Gluestack UI Imports
 import { Box } from "@/components/ui/box";
 import { VStack } from "@/components/ui/vstack";
 import { HStack } from "@/components/ui/hstack";
@@ -64,7 +63,6 @@ export function SignUpForm() {
 
   const isFetching = fetchStatus === "fetching";
 
-  // --- Verification Flow View ---
   if (
     signUp.status === "missing_requirements" &&
     signUp.unverifiedFields.includes("email_address") &&
@@ -113,7 +111,6 @@ export function SignUpForm() {
     );
   }
 
-  // --- Initial Sign Up Flow View ---
   return (
     <Box className="flex-1 justify-center p-5 bg-background-0">
       <VStack space="md">
@@ -179,7 +176,6 @@ export function SignUpForm() {
           </Link>
         </HStack>
 
-        {/* Required for Clerk's bot protection */}
         <Box nativeID="clerk-captcha" />
       </VStack>
     </Box>

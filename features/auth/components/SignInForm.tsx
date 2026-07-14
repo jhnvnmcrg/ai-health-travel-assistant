@@ -1,8 +1,9 @@
-import React from "react";
-import { useSignIn } from "@clerk/expo";
+import React, { useEffect } from "react";
+import { useSignIn, useUser } from "@clerk/expo";
 import { type Href, Link, useRouter } from "expo-router";
+import { useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
 
-// Gluestack UI Imports
 import { Box } from "@/components/ui/box";
 import { VStack } from "@/components/ui/vstack";
 import { HStack } from "@/components/ui/hstack";
@@ -14,10 +15,35 @@ import { Button, ButtonText } from "@/components/ui/button";
 export function SignInForm() {
   const { signIn, errors, fetchStatus } = useSignIn();
   const router = useRouter();
+  const { user, isLoaded } = useUser();
+  const syncUser = useMutation(api.users.syncUser);
 
+  const [isSynced, setIsSynced] = React.useState(false);
   const [emailAddress, setEmailAddress] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [code, setCode] = React.useState("");
+
+  useEffect(() => {
+    const synchronize = async () => {
+      if (!isLoaded || !user || isSynced) return;
+
+      try {
+        await syncUser({
+          clerkUserId: user.id,
+          email: user.primaryEmailAddress?.emailAddress ?? "",
+          displayName: user.fullName ?? undefined,
+        });
+
+        setIsSynced(true);
+
+        router.replace("/home");
+      } catch (err) {
+        console.error("Failed to sync user:", err);
+      }
+    };
+
+    synchronize();
+  }, [isLoaded, user, isSynced, syncUser, router]);
 
   const handleSubmit = async () => {
     const { error } = await signIn.password({
@@ -31,22 +57,13 @@ export function SignInForm() {
 
     if (signIn.status === "complete") {
       await signIn.finalize({
-        navigate: ({ session, decorateUrl }) => {
+        navigate: ({ session }) => {
           if (session?.currentTask) {
-            console.log(session?.currentTask);
-            return;
-          }
-
-          const url = decorateUrl("/home");
-          if (url.startsWith("http")) {
-            window.location.href = url;
-          } else {
-            router.push(url as Href);
+            console.log(session.currentTask);
           }
         },
       });
     } else if (signIn.status === "needs_second_factor") {
-      // Handle multi-factor auth if needed
     } else if (signIn.status === "needs_client_trust") {
       const emailCodeFactor = signIn.supportedSecondFactors.find(
         (factor) => factor.strategy === "email_code",
@@ -65,17 +82,9 @@ export function SignInForm() {
 
     if (signIn.status === "complete") {
       await signIn.finalize({
-        navigate: ({ session, decorateUrl }) => {
+        navigate: ({ session }) => {
           if (session?.currentTask) {
-            console.log(session?.currentTask);
-            return;
-          }
-
-          const url = decorateUrl("/");
-          if (url.startsWith("http")) {
-            window.location.href = url;
-          } else {
-            router.push(url as Href);
+            console.log(session.currentTask);
           }
         },
       });
@@ -86,7 +95,6 @@ export function SignInForm() {
 
   const isFetching = fetchStatus === "fetching";
 
-  // --- MFA / Trust Verification View ---
   if (signIn.status === "needs_client_trust") {
     return (
       <Box className="flex-1 justify-center p-5 bg-background-0">
@@ -132,7 +140,6 @@ export function SignInForm() {
     );
   }
 
-  // --- Primary Sign In View ---
   return (
     <Box className="flex-1 justify-center p-5 bg-background-0">
       <VStack space="md">
