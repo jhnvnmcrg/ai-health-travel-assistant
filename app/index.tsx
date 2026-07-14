@@ -9,8 +9,8 @@ export default function Index() {
   }
 
   if (isSignedIn) {
-    return <Redirect href="/(protected)/home" />;
+    return <Redirect href="/home" />;
   }
 
-  return <Redirect href="/(auth)/sign-in" />;
+  return <Redirect href="/sign-in" />;
 }
