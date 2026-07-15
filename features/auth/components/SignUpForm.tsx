@@ -69,7 +69,7 @@ export function SignUpForm() {
     signUp.missingFields.length === 0
   ) {
     return (
-      <Box className="flex-1 p-5 bg-background-0">
+      <Box className="flex-1 justify-center p-5 bg-background-0">
         <VStack space="md">
           <Heading size="xl" className="mb-2">
             Verify your account
