@@ -30,7 +30,11 @@ export function MessageList({ conversationId }: MessageListProps) {
       data={messages}
       keyExtractor={(item) => item._id}
       renderItem={({ item }) => (
-        <ChatMessage role={item.role} text={item.text} />
+        <ChatMessage
+          role={item.role}
+          text={item.text}
+          environmentalMetadata={item.environmentalMetadata}
+        />
       )}
       contentContainerStyle={{
         paddingVertical: 12,
