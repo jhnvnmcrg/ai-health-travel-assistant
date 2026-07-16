@@ -8,8 +8,10 @@
  * @module
  */
 
+import type * as ai from "../ai.js";
+import type * as chat from "../chat.js";
 import type * as conversations from "../conversations.js";
-import type * as hello from "../hello.js";
+import type * as lib_gemini from "../lib/gemini.js";
 import type * as messages from "../messages.js";
 import type * as users from "../users.js";
 
@@ -20,8 +22,10 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  ai: typeof ai;
+  chat: typeof chat;
   conversations: typeof conversations;
-  hello: typeof hello;
+  "lib/gemini": typeof lib_gemini;
   messages: typeof messages;
   users: typeof users;
 }>;

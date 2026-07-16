@@ -49,6 +49,23 @@ export const createMessage = mutation({
   },
 });
 
+export const createAssistantMessage = mutation({
+  args: {
+    conversationId: v.id("conversations"),
+    text: v.string(),
+  },
+
+  handler: async (ctx, args) => {
+    return await ctx.db.insert("messages", {
+      conversationId: args.conversationId,
+      role: "assistant",
+      text: args.text,
+      status: "complete",
+      createdAt: Date.now(),
+    });
+  },
+});
+
 export const listMessages = query({
   args: {
     conversationId: v.id("conversations"),
