@@ -2,6 +2,7 @@ import { Content } from "@google/genai";
 
 import { gemini } from "./client";
 import { SYSTEM_PROMPT } from "./systemPrompt";
+import { environmentTool } from "./tools";
 
 export async function generateChatResponse(
   history: Content[],
@@ -11,6 +12,12 @@ export async function generateChatResponse(
 
     config: {
       systemInstruction: SYSTEM_PROMPT,
+
+      tools: [
+        {
+          functionDeclarations: [environmentTool],
+        },
+      ],
     },
 
     contents: history,

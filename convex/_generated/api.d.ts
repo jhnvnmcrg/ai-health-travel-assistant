@@ -12,6 +12,7 @@ import type * as ai_client from "../ai/client.js";
 import type * as ai_context from "../ai/context.js";
 import type * as ai_generate from "../ai/generate.js";
 import type * as ai_systemPrompt from "../ai/systemPrompt.js";
+import type * as ai_tools from "../ai/tools.js";
 import type * as ai_types from "../ai/types.js";
 import type * as chat from "../chat.js";
 import type * as context from "../context.js";
@@ -31,6 +32,7 @@ declare const fullApi: ApiFromModules<{
   "ai/context": typeof ai_context;
   "ai/generate": typeof ai_generate;
   "ai/systemPrompt": typeof ai_systemPrompt;
+  "ai/tools": typeof ai_tools;
   "ai/types": typeof ai_types;
   chat: typeof chat;
   context: typeof context;
