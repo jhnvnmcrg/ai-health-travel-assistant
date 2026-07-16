@@ -10,6 +10,7 @@
 
 import type * as ai from "../ai.js";
 import type * as chat from "../chat.js";
+import type * as context from "../context.js";
 import type * as conversations from "../conversations.js";
 import type * as lib_gemini from "../lib/gemini.js";
 import type * as messages from "../messages.js";
@@ -24,6 +25,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   ai: typeof ai;
   chat: typeof chat;
+  context: typeof context;
   conversations: typeof conversations;
   "lib/gemini": typeof lib_gemini;
   messages: typeof messages;

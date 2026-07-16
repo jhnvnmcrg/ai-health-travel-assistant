@@ -13,6 +13,10 @@ export const processUserMessage = action({
       prompt: args.text,
     });
 
+    const context = await ctx.runAction(api.context.buildConversationContext, {
+      conversationId: args.conversationId,
+    });
+
     await ctx.runMutation(api.messages.createAssistantMessage, {
       conversationId: args.conversationId,
       text: reply,

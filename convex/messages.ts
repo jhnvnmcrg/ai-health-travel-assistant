@@ -81,3 +81,24 @@ export const listMessages = query({
       .collect();
   },
 });
+
+export const getConversationContext = query({
+  args: {
+    conversationId: v.id("conversations"),
+  },
+
+  handler: async (ctx, args) => {
+    const messages = await ctx.db
+      .query("messages")
+      .withIndex("by_conversation", (q) =>
+        q.eq("conversationId", args.conversationId),
+      )
+      .order("asc")
+      .collect();
+
+    return messages.slice(-5).map((message) => ({
+      role: message.role,
+      text: message.text,
+    }));
+  },
+});
