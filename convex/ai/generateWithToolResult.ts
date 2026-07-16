@@ -4,7 +4,7 @@ import { gemini } from "./client";
 import { SYSTEM_PROMPT } from "./systemPrompt";
 import { environmentTool } from "./tools";
 
-export async function generateChatResponse(
+export async function generateChatResponseWithToolResult(
   history: Content[],
 ): Promise<GenerateContentResponse> {
   return await gemini.models.generateContent({

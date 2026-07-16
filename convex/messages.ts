@@ -53,6 +53,23 @@ export const createAssistantMessage = mutation({
   args: {
     conversationId: v.id("conversations"),
     text: v.string(),
+    environmentalMetadata: v.optional(
+      v.object({
+        latitude: v.number(),
+        longitude: v.number(),
+        altitude: v.number(),
+        temperature: v.number(),
+        humidity: v.number(),
+        windSpeed: v.number(),
+        pm25: v.number(),
+        pm10: v.number(),
+        safetyVerdict: v.union(
+          v.literal("Safe"),
+          v.literal("Caution"),
+          v.literal("High Risk"),
+        ),
+      }),
+    ),
   },
 
   handler: async (ctx, args) => {
@@ -60,6 +77,7 @@ export const createAssistantMessage = mutation({
       conversationId: args.conversationId,
       role: "assistant",
       text: args.text,
+      environmentalMetadata: args.environmentalMetadata,
       status: "complete",
       createdAt: Date.now(),
     });

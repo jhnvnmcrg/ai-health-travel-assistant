@@ -15,3 +15,23 @@ export function buildGeminiContents(history: ContextMessage[]): Content[] {
     ],
   }));
 }
+
+export function appendToolResult(
+  history: Content[],
+  functionName: string,
+  toolResult: unknown,
+): Content[] {
+  return [
+    ...history,
+    {
+      role: "user",
+      parts: [
+        {
+          text:
+            `Tool Result (${functionName}):\n` +
+            JSON.stringify(toolResult, null, 2),
+        },
+      ],
+    },
+  ];
+}
