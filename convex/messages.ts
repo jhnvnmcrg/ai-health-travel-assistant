@@ -23,6 +23,9 @@ export const createMessage = mutation({
         temperature: v.number(),
         humidity: v.number(),
         windSpeed: v.number(),
+        uvIndex: v.number(),
+        rainProbability: v.number(),
+        heatIndex: v.number(),
         pm25: v.number(),
         pm10: v.number(),
         safetyVerdict: v.union(
@@ -61,6 +64,9 @@ export const createAssistantMessage = mutation({
         temperature: v.number(),
         humidity: v.number(),
         windSpeed: v.number(),
+        uvIndex: v.number(),
+        rainProbability: v.number(),
+        heatIndex: v.number(),
         pm25: v.number(),
         pm10: v.number(),
         safetyVerdict: v.union(
@@ -70,6 +76,15 @@ export const createAssistantMessage = mutation({
         ),
       }),
     ),
+    nearbyHospitals: v.optional(
+      v.array(
+        v.object({
+          name: v.string(),
+          latitude: v.number(),
+          longitude: v.number(),
+        }),
+      ),
+    ),
   },
 
   handler: async (ctx, args) => {
@@ -78,8 +93,87 @@ export const createAssistantMessage = mutation({
       role: "assistant",
       text: args.text,
       environmentalMetadata: args.environmentalMetadata,
+      nearbyHospitals: args.nearbyHospitals,
       status: "complete",
       createdAt: Date.now(),
+    });
+  },
+});
+
+export const createStreamingMessage = mutation({
+  args: {
+    conversationId: v.id("conversations"),
+  },
+
+  handler: async (ctx, args) => {
+    return await ctx.db.insert("messages", {
+      conversationId: args.conversationId,
+      role: "assistant",
+      text: "",
+      status: "streaming",
+      createdAt: Date.now(),
+    });
+  },
+});
+
+export const appendToStreamingMessage = mutation({
+  args: {
+    messageId: v.id("messages"),
+    textChunk: v.string(),
+  },
+
+  handler: async (ctx, args) => {
+    const message = await ctx.db.get(args.messageId);
+
+    if (!message) {
+      throw new Error("Streaming message not found.");
+    }
+
+    await ctx.db.patch(args.messageId, {
+      text: message.text + args.textChunk,
+    });
+  },
+});
+
+export const finishStreamingMessage = mutation({
+  args: {
+    messageId: v.id("messages"),
+    environmentalMetadata: v.optional(
+      v.object({
+        latitude: v.number(),
+        longitude: v.number(),
+        altitude: v.number(),
+        temperature: v.number(),
+        humidity: v.number(),
+        windSpeed: v.number(),
+        uvIndex: v.number(),
+        rainProbability: v.number(),
+        heatIndex: v.number(),
+        pm25: v.number(),
+        pm10: v.number(),
+        safetyVerdict: v.union(
+          v.literal("Safe"),
+          v.literal("Caution"),
+          v.literal("High Risk"),
+        ),
+      }),
+    ),
+    nearbyHospitals: v.optional(
+      v.array(
+        v.object({
+          name: v.string(),
+          latitude: v.number(),
+          longitude: v.number(),
+        }),
+      ),
+    ),
+  },
+
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.messageId, {
+      status: "complete",
+      environmentalMetadata: args.environmentalMetadata,
+      nearbyHospitals: args.nearbyHospitals,
     });
   },
 });

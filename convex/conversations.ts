@@ -4,7 +4,7 @@ import { v } from "convex/values";
 export const createConversation = mutation({
   args: {
     userId: v.id("users"),
-    title: v.string(),
+    title: v.optional(v.string()),
   },
 
   handler: async (ctx, args) => {
@@ -16,6 +16,41 @@ export const createConversation = mutation({
       createdAt: now,
       updatedAt: now,
     });
+  },
+});
+
+export const updateTitle = mutation({
+  args: {
+    conversationId: v.id("conversations"),
+    title: v.string(),
+  },
+
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.conversationId, {
+      title: args.title,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+export const deleteConversation = mutation({
+  args: {
+    conversationId: v.id("conversations"),
+  },
+
+  handler: async (ctx, args) => {
+    const messages = await ctx.db
+      .query("messages")
+      .withIndex("by_conversation", (q) =>
+        q.eq("conversationId", args.conversationId),
+      )
+      .collect();
+
+    for (const message of messages) {
+      await ctx.db.delete(message._id);
+    }
+
+    await ctx.db.delete(args.conversationId);
   },
 });
 

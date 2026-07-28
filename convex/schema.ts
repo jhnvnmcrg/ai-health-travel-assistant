@@ -23,9 +23,7 @@ export default defineSchema({
 
   conversations: defineTable({
     userId: v.id("users"),
-
-    title: v.string(),
-
+    title: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -34,11 +32,8 @@ export default defineSchema({
 
   messages: defineTable({
     conversationId: v.id("conversations"),
-
     role: v.union(v.literal("user"), v.literal("assistant")),
-
     text: v.string(),
-
     status: v.optional(
       v.union(
         v.literal("sending"),
@@ -47,11 +42,8 @@ export default defineSchema({
         v.literal("error"),
       ),
     ),
-
     toolCalls: v.optional(v.any()),
-
     toolResults: v.optional(v.any()),
-
     environmentalMetadata: v.optional(
       v.object({
         latitude: v.number(),
@@ -60,6 +52,9 @@ export default defineSchema({
         temperature: v.number(),
         humidity: v.number(),
         windSpeed: v.number(),
+        uvIndex: v.number(),
+        rainProbability: v.number(),
+        heatIndex: v.number(),
         pm25: v.number(),
         pm10: v.number(),
         safetyVerdict: v.union(
@@ -68,6 +63,15 @@ export default defineSchema({
           v.literal("High Risk"),
         ),
       }),
+    ),
+    nearbyHospitals: v.optional(
+      v.array(
+        v.object({
+          name: v.string(),
+          latitude: v.number(),
+          longitude: v.number(),
+        }),
+      ),
     ),
 
     createdAt: v.number(),

@@ -2,9 +2,11 @@ import { action } from "./_generated/server";
 import { v } from "convex/values";
 import { api } from "./_generated/api";
 
-import { buildGeminiContents, appendToolResult } from "./ai/context";
-import { generateChatResponse } from "./ai/generate";
-import { generateChatResponseWithToolResult } from "./ai/generateWithToolResult";
+import { runHealthTravelAssistant } from "./ai/orchestrator";
+import { generateConversationTitle } from "./ai/generateConversationTitle";
+
+const CHUNK_SIZE = 6;
+const CHUNK_DELAY_MS = 25;
 
 export const processUserMessage = action({
   args: {
@@ -13,69 +15,59 @@ export const processUserMessage = action({
   },
 
   handler: async (ctx, args) => {
-    const history = await ctx.runQuery(api.messages.getConversationContext, {
+    const conversation = await ctx.runQuery(api.conversations.getConversation, {
       conversationId: args.conversationId,
     });
 
-    const contents = buildGeminiContents(history);
+    if (!conversation?.title) {
+      try {
+        const title = await generateConversationTitle(args.text);
 
-    const response = await generateChatResponse(contents);
-
-    const functionCall = response.functionCalls?.[0];
-
-    let finalText = response.text ?? "No response generated.";
-
-    if (
-      functionCall?.name === "fetch_location_environment_data" &&
-      functionCall.args &&
-      typeof functionCall.args.location === "string"
-    ) {
-      const environment = await ctx.runAction(
-        api.environment.fetchLocationEnvironmentData,
-        {
-          location: functionCall.args.location,
-        },
-      );
-
-      const updatedHistory = appendToolResult(
-        contents,
-        functionCall.name,
-        environment,
-      );
-
-      const finalResponse =
-        await generateChatResponseWithToolResult(updatedHistory);
-
-      finalText = finalResponse.text ?? "No response generated.";
+        await ctx.runMutation(api.conversations.updateTitle, {
+          conversationId: args.conversationId,
+          title,
+        });
+      } catch (error) {
+        console.warn("Failed to generate conversation title:", error);
+      }
     }
 
-    let assistantText = finalText;
-    let environmentalMetadata;
+    const aiResponse = await runHealthTravelAssistant(
+      ctx,
+      args.conversationId as any,
+    );
 
-    try {
-      const parsed = JSON.parse(finalText);
+    const assistantText = aiResponse.advice;
 
-      assistantText = parsed.advice;
+    const environmentalMetadata = aiResponse.environmentalMetadata
+      ? {
+          ...aiResponse.environmentalMetadata,
+          safetyVerdict: aiResponse.safetyVerdict || "Safe",
+        }
+      : undefined;
 
-      environmentalMetadata = {
-        latitude: parsed.environmentalMetadata.latitude,
-        longitude: parsed.environmentalMetadata.longitude,
-        altitude: parsed.environmentalMetadata.altitude,
-        temperature: parsed.environmentalMetadata.temperature,
-        humidity: parsed.environmentalMetadata.humidity,
-        windSpeed: parsed.environmentalMetadata.windSpeed,
-        pm25: parsed.environmentalMetadata.pm25,
-        pm10: parsed.environmentalMetadata.pm10,
-        safetyVerdict: parsed.safetyVerdict,
-      };
-    } catch {
-      console.warn("Gemini returned non-JSON response.");
+    const streamingMessageId = await ctx.runMutation(
+      api.messages.createStreamingMessage,
+      {
+        conversationId: args.conversationId,
+      },
+    );
+
+    for (let i = 0; i < assistantText.length; i += CHUNK_SIZE) {
+      const chunk = assistantText.slice(i, i + CHUNK_SIZE);
+
+      await ctx.runMutation(api.messages.appendToStreamingMessage, {
+        messageId: streamingMessageId,
+        textChunk: chunk,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, CHUNK_DELAY_MS));
     }
 
-    await ctx.runMutation(api.messages.createAssistantMessage, {
-      conversationId: args.conversationId,
-      text: assistantText,
+    await ctx.runMutation(api.messages.finishStreamingMessage, {
+      messageId: streamingMessageId,
       environmentalMetadata,
+      nearbyHospitals: aiResponse.nearbyHospitals ?? undefined,
     });
   },
 });

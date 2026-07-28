@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useCurrentUser } from "@/features/auth/hooks/useCurrentUser";
-import { useConversation } from "./useConversation";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useConversation } from "@/hooks/useConversation";
 import { useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 

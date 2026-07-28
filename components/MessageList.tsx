@@ -1,9 +1,7 @@
 import { FlatList } from "react-native";
 import { useQuery } from "convex/react";
-
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
-
 import { EmptyState } from "./EmptyState";
 import { ChatMessage } from "./ChatMessage";
 
@@ -29,12 +27,9 @@ export function MessageList({ conversationId }: MessageListProps) {
     <FlatList
       data={messages}
       keyExtractor={(item) => item._id}
+      className="bg-[#F5F1E6]"
       renderItem={({ item }) => (
-        <ChatMessage
-          role={item.role}
-          text={item.text}
-          environmentalMetadata={item.environmentalMetadata}
-        />
+        <ChatMessage role={item.role} text={item.text} />
       )}
       contentContainerStyle={{
         paddingVertical: 12,

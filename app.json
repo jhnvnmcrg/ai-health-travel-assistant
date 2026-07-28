@@ -33,6 +33,12 @@
       "expo-secure-store",
       "@clerk/expo",
       [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow Health Travel Assistant to access your location to provide travel health information for your current area."
+        }
+      ],
+      [
         "expo-build-properties",
         {
           "android": {

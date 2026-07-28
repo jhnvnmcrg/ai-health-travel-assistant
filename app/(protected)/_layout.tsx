@@ -1,7 +1,8 @@
 import { View, ActivityIndicator } from "react-native";
-import { Stack, Redirect } from "expo-router";
+import { Redirect, Stack } from "expo-router";
 import { UserButton } from "@clerk/expo/native";
 import { useAuth } from "@clerk/expo";
+import { House, MessageCircleIcon, CircleUserRound } from "lucide-react-native";
 
 export default function HomeLayout() {
   const { isLoaded, isSignedIn } = useAuth();
@@ -18,15 +19,5 @@ export default function HomeLayout() {
     return <Redirect href="/sign-in" />;
   }
 
-  return (
-    <Stack
-      screenOptions={{
-        headerRight: () => (
-          <View style={{ marginRight: 16 }}>
-            <UserButton />
-          </View>
-        ),
-      }}
-    />
-  );
+  return <Stack screenOptions={{ headerShown: false }} />;
 }

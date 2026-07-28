@@ -25,7 +25,6 @@ export function useConversation(userId?: Id<"users">) {
 
       const id = await createConversation({
         userId,
-        title: "New Health Consultation",
       });
 
       setConversationId(id);

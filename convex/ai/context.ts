@@ -1,4 +1,4 @@
-import { Content } from "@google/genai";
+import { Content, GenerateContentResponse } from "@google/genai";
 
 type ContextMessage = {
   role: "user" | "assistant";
@@ -16,22 +16,26 @@ export function buildGeminiContents(history: ContextMessage[]): Content[] {
   }));
 }
 
-export function appendToolResult(
+
+export function appendToolResults(
   history: Content[],
-  functionName: string,
-  toolResult: unknown,
+  modelResponse: GenerateContentResponse,
+  results: { name: string; result: unknown }[],
 ): Content[] {
-  return [
-    ...history,
-    {
-      role: "user",
-      parts: [
-        {
-          text:
-            `Tool Result (${functionName}):\n` +
-            JSON.stringify(toolResult, null, 2),
-        },
-      ],
-    },
-  ];
+  const modelTurn = modelResponse.candidates?.[0]?.content;
+
+  const functionResponseTurn: Content = {
+    role: "user",
+    parts: results.map(({ name, result }) => ({
+      functionResponse: {
+        name,
+        response:
+          result !== null && typeof result === "object" && !Array.isArray(result)
+            ? (result as Record<string, unknown>)
+            : { result },
+      },
+    })),
+  };
+
+  return [...history, ...(modelTurn ? [modelTurn] : []), functionResponseTurn];
 }
