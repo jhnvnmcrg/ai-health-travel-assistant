@@ -1,33 +1,25 @@
 import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  Pressable,
-  Alert,
-  Modal,
-} from "react-native";
+import { Alert, Modal, Pressable, TouchableOpacity } from "react-native";
 import { EllipsisVertical, Trash2, User } from "lucide-react-native";
-import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { UserProfileView } from "@clerk/expo/native";
+import { Box } from "@/components/ui/box";
+import { HStack } from "@/components/ui/hstack";
+import { Icon } from "@/components/ui/icon";
+import { Text } from "@/components/ui/text";
 
 export function MenuHeader() {
   const [menuVisible, setMenuVisible] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
-  const { convexUser, isLoading } = useCurrentUser();
+  const { isAuthenticated } = useConvexAuth();
   const deleteConversation = useMutation(api.conversations.deleteConversation);
   const conversations = useQuery(
     api.conversations.listConversations,
-    convexUser
-      ? {
-          userId: convexUser._id,
-        }
-      : "skip",
+    isAuthenticated ? {} : "skip",
   );
 
-  if (isLoading || conversations === undefined) {
+  if (conversations === undefined) {
     return null;
   }
 
@@ -60,48 +52,55 @@ export function MenuHeader() {
 
   return (
     <>
-      <View className="flex-row items-center justify-end">
-        <TouchableOpacity
-          onPress={() => setMenuVisible(!menuVisible)}
-          className="w-10 h-10 rounded-full items-center justify-center active:bg-[#F5F1E6]/10"
-        >
-          <EllipsisVertical size={20} color="#F5F1E6" />
-        </TouchableOpacity>
-      </View>
+      <TouchableOpacity
+        onPress={() => setMenuVisible(!menuVisible)}
+        accessibilityRole="button"
+        accessibilityLabel={menuVisible ? "Close menu" : "Open menu"}
+        className="h-10 w-10 items-center justify-center rounded-full active:bg-accent"
+      >
+        <Icon as={EllipsisVertical} size="lg" className="text-foreground" />
+      </TouchableOpacity>
 
       {menuVisible && (
         <>
+          {/* Oversized so a tap anywhere outside the menu dismisses it. */}
           <Pressable
-            className="absolute top-0 left-0 right-0 bottom-0 h-[1000%] w-[1000%] z-40"
+            accessibilityRole="button"
+            accessibilityLabel="Close menu"
+            className="absolute bottom-0 left-0 right-0 top-0 z-40 h-[1000%] w-[1000%]"
             onPress={() => setMenuVisible(false)}
           />
-          <View className="absolute right-5 top-16 bg-[#FBF8F1] border border-[#E4D9C4] p-1.5 rounded-xl shadow-lg w-48 z-50">
+          <Box className="absolute right-0 top-12 z-50 w-48 rounded-xl border border-border bg-popover p-1.5 shadow-lg">
             <TouchableOpacity
               onPress={() => {
                 setMenuVisible(false);
                 setIsAuthOpen(true);
               }}
-              className="flex-row items-center gap-3 p-2.5 rounded-lg active:bg-[#C08552]/15"
+              className="rounded-lg p-2.5 active:bg-accent"
             >
-              <User size={16} color="#1F3A2E" />
-              <Text className="text-[#2A2420] font-medium text-sm">
-                Account
-              </Text>
+              <HStack space="sm" className="items-center">
+                <Icon as={User} size="sm" className="text-popover-foreground" />
+                <Text size="sm" className="font-medium text-popover-foreground">
+                  Account
+                </Text>
+              </HStack>
             </TouchableOpacity>
 
             {item && item.title !== undefined && (
               <TouchableOpacity
                 disabled={isDeleteDisabled}
                 onPress={handleDeleteChat}
-                className="flex-row items-center gap-3 p-2.5 rounded-lg active:bg-[#C08552]/15"
+                className="rounded-lg p-2.5 active:bg-accent"
               >
-                <Trash2 size={16} color="#A23B2D" />
-                <Text className="text-[#A23B2D] font-medium text-sm">
-                  Delete Chat
-                </Text>
+                <HStack space="sm" className="items-center">
+                  <Icon as={Trash2} size="sm" className="text-destructive" />
+                  <Text size="sm" className="font-medium text-destructive">
+                    Delete Chat
+                  </Text>
+                </HStack>
               </TouchableOpacity>
             )}
-          </View>
+          </Box>
         </>
       )}
 

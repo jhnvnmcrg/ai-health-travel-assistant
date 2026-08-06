@@ -99,11 +99,12 @@ type IBadgeIconProps = React.ComponentPropsWithoutRef<typeof PrimitiveIcon> &
 const StyledUIIcon = styled(UIIcon, {
   className: {
     target: 'style',
-    nativeStyleToProp: {
+    // nativeStyleToProp is deprecated in react-native-css v3.
+    nativeStyleMapping: {
       height: true,
       width: true,
       fill: true,
-      color: 'classNameColor',
+      color: true,
       stroke: true,
     },
   },

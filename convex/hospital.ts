@@ -1,4 +1,4 @@
-import { action } from "./_generated/server";
+import { internalAction } from "./_generated/server";
 import { v } from "convex/values";
 
 const OVERPASS_ENDPOINTS = [
@@ -24,7 +24,8 @@ async function queryOverpass(endpoint: string, query: string) {
   }
 }
 
-export const searchNearbyHospitals = action({
+/** Internal: reached only through the Gemini tool loop. */
+export const searchNearbyHospitals = internalAction({
   args: {
     latitude: v.number(),
     longitude: v.number(),

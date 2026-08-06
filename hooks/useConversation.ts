@@ -1,40 +1,57 @@
-import { useEffect, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useEffect, useRef, useState } from "react";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 
-export function useConversation(userId?: Id<"users">) {
+/**
+ * Resolves the single conversation the UI works with: the most recent one, or a
+ * freshly created one. There is no conversation switcher yet.
+ */
+export function useConversation(enabled = true) {
+  const { isAuthenticated } = useConvexAuth();
+  const canLoad = enabled && isAuthenticated;
+
   const conversations = useQuery(
     api.conversations.listConversations,
-    userId ? { userId } : "skip",
+    canLoad ? {} : "skip",
   );
 
   const createConversation = useMutation(api.conversations.createConversation);
 
   const [conversationId, setConversationId] = useState<Id<"conversations">>();
+  const [error, setError] = useState<string>();
+
+  // Guards against a second create while the first is still in flight — the
+  // query re-runs on every reactivity tick, and this effect with it.
+  const isCreating = useRef(false);
 
   useEffect(() => {
-    if (!userId) return;
-    if (conversations === undefined) return;
+    if (!canLoad || conversations === undefined) return;
 
-    async function initializeConversation() {
-      if (conversations.length > 0) {
-        setConversationId(conversations[0]._id);
-        return;
-      }
-
-      const id = await createConversation({
-        userId,
-      });
-
-      setConversationId(id);
+    if (conversations.length > 0) {
+      isCreating.current = false;
+      setConversationId(conversations[0]._id);
+      return;
     }
 
-    initializeConversation();
-  }, [userId, conversations, createConversation]);
+    if (isCreating.current) return;
+    isCreating.current = true;
+
+    createConversation({})
+      .then((id) => {
+        setError(undefined);
+        setConversationId(id);
+      })
+      .catch((err) => {
+        console.error("Failed to create a conversation:", err);
+        isCreating.current = false;
+        setError("Couldn't start a conversation. Reopen the app to try again.");
+      });
+  }, [canLoad, conversations, createConversation]);
 
   return {
     conversationId,
     isReady: !!conversationId,
+    error,
   };
 }

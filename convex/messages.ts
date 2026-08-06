@@ -1,106 +1,51 @@
-import { mutation, query } from "./_generated/server";
+import {
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+} from "./_generated/server";
 import { v } from "convex/values";
+import {
+  environmentalMetadataValidator,
+  nearbyHospitalsValidator,
+} from "./schema";
+import { getOwnedConversation, requireConversation } from "./lib/auth";
 
+/** How many trailing messages are replayed to Gemini as conversation memory. */
+const CONTEXT_MESSAGE_LIMIT = 5;
+
+/**
+ * The only message-writing mutation the client can call, so it is fixed to
+ * `role: "user"` — assistant rows are written by convex/chat.ts through the
+ * internal mutations below.
+ */
 export const createMessage = mutation({
   args: {
     conversationId: v.id("conversations"),
-    role: v.union(v.literal("user"), v.literal("assistant")),
     text: v.string(),
-    status: v.optional(
-      v.union(
-        v.literal("sending"),
-        v.literal("streaming"),
-        v.literal("complete"),
-        v.literal("error"),
-      ),
-    ),
-
-    environmentalMetadata: v.optional(
-      v.object({
-        latitude: v.number(),
-        longitude: v.number(),
-        altitude: v.number(),
-        temperature: v.number(),
-        humidity: v.number(),
-        windSpeed: v.number(),
-        uvIndex: v.number(),
-        rainProbability: v.number(),
-        heatIndex: v.number(),
-        pm25: v.number(),
-        pm10: v.number(),
-        safetyVerdict: v.union(
-          v.literal("Safe"),
-          v.literal("Caution"),
-          v.literal("High Risk"),
-        ),
-      }),
-    ),
   },
 
   handler: async (ctx, args) => {
-    return await ctx.db.insert("messages", {
+    await requireConversation(ctx, args.conversationId);
+
+    const now = Date.now();
+
+    const messageId = await ctx.db.insert("messages", {
       conversationId: args.conversationId,
-      role: args.role,
+      role: "user",
       text: args.text,
-      createdAt: Date.now(),
-
-      ...(args.status && { status: args.status }),
-      ...(args.environmentalMetadata && {
-        environmentalMetadata: args.environmentalMetadata,
-      }),
-    });
-  },
-});
-
-export const createAssistantMessage = mutation({
-  args: {
-    conversationId: v.id("conversations"),
-    text: v.string(),
-    environmentalMetadata: v.optional(
-      v.object({
-        latitude: v.number(),
-        longitude: v.number(),
-        altitude: v.number(),
-        temperature: v.number(),
-        humidity: v.number(),
-        windSpeed: v.number(),
-        uvIndex: v.number(),
-        rainProbability: v.number(),
-        heatIndex: v.number(),
-        pm25: v.number(),
-        pm10: v.number(),
-        safetyVerdict: v.union(
-          v.literal("Safe"),
-          v.literal("Caution"),
-          v.literal("High Risk"),
-        ),
-      }),
-    ),
-    nearbyHospitals: v.optional(
-      v.array(
-        v.object({
-          name: v.string(),
-          latitude: v.number(),
-          longitude: v.number(),
-        }),
-      ),
-    ),
-  },
-
-  handler: async (ctx, args) => {
-    return await ctx.db.insert("messages", {
-      conversationId: args.conversationId,
-      role: "assistant",
-      text: args.text,
-      environmentalMetadata: args.environmentalMetadata,
-      nearbyHospitals: args.nearbyHospitals,
       status: "complete",
-      createdAt: Date.now(),
+      createdAt: now,
     });
+
+    await ctx.db.patch(args.conversationId, { updatedAt: now });
+
+    return messageId;
   },
 });
 
-export const createStreamingMessage = mutation({
+/** Internal: called by convex/chat.ts once ownership has been verified. */
+export const createStreamingMessage = internalMutation({
   args: {
     conversationId: v.id("conversations"),
   },
@@ -116,7 +61,7 @@ export const createStreamingMessage = mutation({
   },
 });
 
-export const appendToStreamingMessage = mutation({
+export const appendToStreamingMessage = internalMutation({
   args: {
     messageId: v.id("messages"),
     textChunk: v.string(),
@@ -135,45 +80,65 @@ export const appendToStreamingMessage = mutation({
   },
 });
 
-export const finishStreamingMessage = mutation({
+export const finishStreamingMessage = internalMutation({
   args: {
     messageId: v.id("messages"),
-    environmentalMetadata: v.optional(
-      v.object({
-        latitude: v.number(),
-        longitude: v.number(),
-        altitude: v.number(),
-        temperature: v.number(),
-        humidity: v.number(),
-        windSpeed: v.number(),
-        uvIndex: v.number(),
-        rainProbability: v.number(),
-        heatIndex: v.number(),
-        pm25: v.number(),
-        pm10: v.number(),
-        safetyVerdict: v.union(
-          v.literal("Safe"),
-          v.literal("Caution"),
-          v.literal("High Risk"),
-        ),
-      }),
-    ),
-    nearbyHospitals: v.optional(
-      v.array(
-        v.object({
-          name: v.string(),
-          latitude: v.number(),
-          longitude: v.number(),
-        }),
-      ),
-    ),
+    environmentalMetadata: v.optional(environmentalMetadataValidator),
+    nearbyHospitals: v.optional(nearbyHospitalsValidator),
   },
 
   handler: async (ctx, args) => {
+    const message = await ctx.db.get(args.messageId);
+
+    if (!message) {
+      throw new Error("Streaming message not found.");
+    }
+
     await ctx.db.patch(args.messageId, {
       status: "complete",
       environmentalMetadata: args.environmentalMetadata,
       nearbyHospitals: args.nearbyHospitals,
+    });
+
+    await ctx.db.patch(message.conversationId, { updatedAt: Date.now() });
+  },
+});
+
+/** Assistant-side failure the user should see, instead of silence. */
+export const createErrorMessage = internalMutation({
+  args: {
+    conversationId: v.id("conversations"),
+    text: v.string(),
+  },
+
+  handler: async (ctx, args) => {
+    return await ctx.db.insert("messages", {
+      conversationId: args.conversationId,
+      role: "assistant",
+      text: args.text,
+      status: "error",
+      createdAt: Date.now(),
+    });
+  },
+});
+
+/** Marks a half-streamed message as failed so it cannot hang on "streaming". */
+export const failMessage = internalMutation({
+  args: {
+    messageId: v.id("messages"),
+    fallbackText: v.string(),
+  },
+
+  handler: async (ctx, args) => {
+    const message = await ctx.db.get(args.messageId);
+
+    if (!message) {
+      return;
+    }
+
+    await ctx.db.patch(args.messageId, {
+      status: "error",
+      text: message.text || args.fallbackText,
     });
   },
 });
@@ -184,6 +149,14 @@ export const listMessages = query({
   },
 
   handler: async (ctx, args) => {
+    // Degrades to [] rather than throwing: a subscribed MessageList can
+    // outlive the conversation it was rendering (e.g. after a delete).
+    const conversation = await getOwnedConversation(ctx, args.conversationId);
+
+    if (!conversation) {
+      return [];
+    }
+
     return await ctx.db
       .query("messages")
       .withIndex("by_conversation", (q) =>
@@ -194,7 +167,8 @@ export const listMessages = query({
   },
 });
 
-export const getConversationContext = query({
+/** Internal: conversation memory for convex/ai/orchestrator.ts. */
+export const getConversationContext = internalQuery({
   args: {
     conversationId: v.id("conversations"),
   },
@@ -208,9 +182,12 @@ export const getConversationContext = query({
       .order("asc")
       .collect();
 
-    return messages.slice(-5).map((message) => ({
-      role: message.role,
-      text: message.text,
-    }));
+    return messages
+      .filter((message) => message.status !== "error" && message.text !== "")
+      .slice(-CONTEXT_MESSAGE_LIMIT)
+      .map((message) => ({
+        role: message.role,
+        text: message.text,
+      }));
   },
 });

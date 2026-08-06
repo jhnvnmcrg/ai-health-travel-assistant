@@ -15,7 +15,12 @@ export function GluestackUIProvider({
   style?: ViewProps['style'];
 }) {
   useEffect(() => {
-    Appearance.setColorScheme(mode as ColorSchemeName);
+    // 'system' has to become null: Appearance.setColorScheme throws an
+    // invariant on anything other than 'light' | 'dark' | null, and null is
+    // what hands control back to the OS setting.
+    const colorScheme: ColorSchemeName = mode === 'system' ? null : mode;
+
+    Appearance.setColorScheme(colorScheme);
   }, [mode]);
 
   return (

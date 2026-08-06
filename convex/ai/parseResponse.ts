@@ -35,7 +35,8 @@ export function parseAIResponse(rawText: string): AIResponse {
     );
     return {
       advice: text,
-      safetyVerdict: "Safe",
+      // Unparseable health advice defaults to "Caution", never "Safe".
+      safetyVerdict: "Caution",
       medicalDisclaimer: DEFAULT_DISCLAIMER,
     };
   }
@@ -52,7 +53,8 @@ export function parseAIResponse(rawText: string): AIResponse {
     console.warn("AI response missing required fields. Falling back:", parsed);
     return {
       advice: text,
-      safetyVerdict: "Safe",
+      // Unparseable health advice defaults to "Caution", never "Safe".
+      safetyVerdict: "Caution",
       medicalDisclaimer: DEFAULT_DISCLAIMER,
     };
   }

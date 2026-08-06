@@ -1,17 +1,18 @@
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { getAuthedUser, requireConversation, requireUser } from "./lib/auth";
 
 export const createConversation = mutation({
   args: {
-    userId: v.id("users"),
     title: v.optional(v.string()),
   },
 
   handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
     const now = Date.now();
 
     return await ctx.db.insert("conversations", {
-      userId: args.userId,
+      userId: user._id,
       title: args.title,
       createdAt: now,
       updatedAt: now,
@@ -19,7 +20,8 @@ export const createConversation = mutation({
   },
 });
 
-export const updateTitle = mutation({
+/** Internal: only convex/chat.ts sets titles, after it has verified ownership. */
+export const updateTitle = internalMutation({
   args: {
     conversationId: v.id("conversations"),
     title: v.string(),
@@ -39,6 +41,8 @@ export const deleteConversation = mutation({
   },
 
   handler: async (ctx, args) => {
+    await requireConversation(ctx, args.conversationId);
+
     const messages = await ctx.db
       .query("messages")
       .withIndex("by_conversation", (q) =>
@@ -55,25 +59,38 @@ export const deleteConversation = mutation({
 });
 
 export const listConversations = query({
-  args: {
-    userId: v.id("users"),
-  },
+  args: {},
 
-  handler: async (ctx, args) => {
+  handler: async (ctx) => {
+    const user = await getAuthedUser(ctx);
+
+    if (!user) {
+      return [];
+    }
+
     return await ctx.db
       .query("conversations")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
       .order("desc")
       .collect();
   },
 });
 
+/**
+ * Throws unless the caller owns the conversation — convex/chat.ts relies on
+ * that to gate `processUserMessage`, so keep the throw.
+ */
 export const getConversation = query({
   args: {
     conversationId: v.id("conversations"),
   },
 
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.conversationId);
+    const { conversation } = await requireConversation(
+      ctx,
+      args.conversationId,
+    );
+
+    return conversation;
   },
 });

@@ -6,7 +6,10 @@ import { styled } from 'nativewind';
 
 
 const StyledActivityIndicator = styled(ActivityIndicator, {
-  className: { target: 'style', nativeStyleToProp: { color: true } },
+  // nativeStyleToProp is deprecated in react-native-css v3; nativeStyleMapping
+  // is the current name. This is what lets `className="text-primary"` reach the
+  // native `color` prop.
+  className: { target: 'style', nativeStyleMapping: { color: true } },
 });
 const spinnerStyle = tva({});
 

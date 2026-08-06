@@ -16,12 +16,16 @@ export default function HomeScreen() {
     isSending,
     isReady,
     conversationId,
+    error,
   } = useChat();
 
   const netInfo = useNetInfo();
   const isOffline = netInfo.isConnected === false;
 
   const statusText = () => {
+    if (error) {
+      return error;
+    }
     if (isOffline) {
       return "You're offline. Messages cannot be sent";
     }
@@ -31,33 +35,42 @@ export default function HomeScreen() {
     return "";
   };
 
+  const status = statusText();
+  const isAlert = !!error || isOffline;
+
   return (
-    <SafeAreaView style={{ flex: 1 }} className="bg-[#1F3A2E]">
+    <SafeAreaView style={{ flex: 1 }} className="bg-background">
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={0}
       >
-        <Box className="flex-1 bg-[#F5F1E6]">
+        <Box className="flex-1 bg-background">
           <ChatHeader />
 
           <Box className="flex-1">
-            <MessageList conversationId={conversationId} />
+            <MessageList
+              conversationId={conversationId}
+              onSuggestionPress={setMessage}
+            />
           </Box>
 
-          <Text
-            className={`text-center py-2 font-mono text-[11px] uppercase tracking-widest ${
-              isOffline ? "text-red-200" : "text-[#9C8F7E]"
-            }`}
-          >
-            {statusText()}
-          </Text>
+          {status !== "" && (
+            <Text
+              size="xs"
+              className={`px-5 py-2 text-center ${
+                isAlert ? "text-destructive" : "text-muted-foreground"
+              }`}
+            >
+              {status}
+            </Text>
+          )}
 
           <ChatComposer
             value={message}
             onChangeText={setMessage}
             onSend={sendMessage}
-            isSending={isSending || isOffline}
+            isSending={isSending || isOffline || !isReady}
           />
         </Box>
       </KeyboardAvoidingView>

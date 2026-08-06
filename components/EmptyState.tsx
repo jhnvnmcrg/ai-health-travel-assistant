@@ -1,24 +1,48 @@
-import { Compass } from "lucide-react-native";
 import { Box } from "@/components/ui/box";
 import { Heading } from "@/components/ui/heading";
+import { Pressable } from "@/components/ui/pressable";
 import { Text } from "@/components/ui/text";
 import { VStack } from "@/components/ui/vstack";
 
-export function EmptyState() {
+const SUGGESTIONS = [
+  "Is it safe to hike Mount Apo tomorrow?",
+  "I have asthma — how is the air in Baguio?",
+  "Which hospitals are near Lake Sebu?",
+];
+
+type EmptyStateProps = {
+  /** Fills the composer instead of sending, so the prompt can be edited. */
+  onSuggestionPress?: (text: string) => void;
+};
+
+export function EmptyState({ onSuggestionPress }: EmptyStateProps) {
   return (
-    <Box className="flex-1 items-center justify-center px-6">
-      <VStack space="md" className="items-center">
-        <Box className="w-16 h-16 rounded-full bg-[#C08552]/20 border border-dashed border-[#C08552] items-center justify-center mb-1">
-          <Compass size={26} className="text-[#BF4E27]" />
-        </Box>
+    <Box className="flex-1 justify-center px-5">
+      <VStack space="xl">
+        <VStack space="xs">
+          <Heading size="xl" className="text-foreground">
+            Where are you headed?
+          </Heading>
+          <Text size="sm" className="text-muted-foreground">
+            Ask about conditions, health risks, or care nearby.
+          </Text>
+        </VStack>
 
-        <Heading className="text-center text-[#1F3A2E]">
-          Ready for the adventure?
-        </Heading>
-
-        <Text className="text-center text-[#6B5F52]">
-          Ask about your health and travel plans.
-        </Text>
+        {onSuggestionPress && (
+          <VStack space="sm">
+            {SUGGESTIONS.map((suggestion) => (
+              <Pressable
+                key={suggestion}
+                onPress={() => onSuggestionPress(suggestion)}
+                className="rounded-xl border border-border bg-card px-4 py-3 active:bg-accent"
+              >
+                <Text size="sm" className="text-foreground">
+                  {suggestion}
+                </Text>
+              </Pressable>
+            ))}
+          </VStack>
+        )}
       </VStack>
     </Box>
   );

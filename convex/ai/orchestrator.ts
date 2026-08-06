@@ -1,5 +1,6 @@
 import { ActionCtx } from "../_generated/server";
-import { api } from "../_generated/api";
+import { internal } from "../_generated/api";
+import type { Id } from "../_generated/dataModel";
 import { buildGeminiContents, appendToolResults } from "./context";
 import { generateChatResponse } from "./generate";
 import { parseAIResponse } from "./parseResponse";
@@ -7,18 +8,60 @@ import type { AIResponse } from "./types";
 import { toolRegistry } from "./toolRegistry";
 
 const MAX_TOOL_ROUNDS = 4;
+const ENVIRONMENT_TOOL = "fetch_location_environment_data";
+
+export type ResolvedLocation = {
+  name: string;
+  latitude: number;
+  longitude: number;
+};
+
+export type AssistantRun = {
+  response: AIResponse;
+  /**
+   * Every place the environment tool resolved during this turn, straight from
+   * the geocoder. convex/chat.ts matches these against the coordinates the
+   * model reported so a reply can't be labelled with the wrong place.
+   */
+  locations: ResolvedLocation[];
+};
+
+function readResolvedLocation(result: unknown): ResolvedLocation | null {
+  if (!result || typeof result !== "object") {
+    return null;
+  }
+
+  const { locationName, latitude, longitude } = result as Record<
+    string,
+    unknown
+  >;
+
+  if (
+    typeof locationName !== "string" ||
+    locationName === "" ||
+    typeof latitude !== "number" ||
+    typeof longitude !== "number"
+  ) {
+    return null;
+  }
+
+  return { name: locationName, latitude, longitude };
+}
 
 export async function runHealthTravelAssistant(
   ctx: ActionCtx,
-  conversationId: string,
-): Promise<AIResponse> {
-  const history = await ctx.runQuery(api.messages.getConversationContext, {
-    conversationId: conversationId as any,
-  });
+  conversationId: Id<"conversations">,
+): Promise<AssistantRun> {
+  const history = await ctx.runQuery(
+    internal.messages.getConversationContext,
+    { conversationId },
+  );
 
   let contents = buildGeminiContents(history);
   let response = await generateChatResponse(contents);
   let rounds = 0;
+
+  const locations: ResolvedLocation[] = [];
 
   while (true) {
     const functionCalls = response.functionCalls ?? [];
@@ -48,6 +91,14 @@ export async function runHealthTravelAssistant(
         (functionCall.args ?? {}) as Record<string, unknown>,
       );
 
+      if (toolName === ENVIRONMENT_TOOL) {
+        const resolved = readResolvedLocation(toolResult);
+
+        if (resolved) {
+          locations.push(resolved);
+        }
+      }
+
       results.push({ name: toolName, result: toolResult });
     }
 
@@ -55,5 +106,8 @@ export async function runHealthTravelAssistant(
     response = await generateChatResponse(contents);
   }
 
-  return parseAIResponse(response.text ?? "");
+  return {
+    response: parseAIResponse(response.text ?? ""),
+    locations,
+  };
 }
