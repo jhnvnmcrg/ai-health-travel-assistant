@@ -1,6 +1,10 @@
-import { mutation, query } from "./_generated/server";
+import { internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { getAuthedUser, requireIdentity } from "./lib/auth";
+import { getAuthedUser, requireIdentity, requireUser } from "./lib/auth";
+
+/** Keeps a runaway paste out of every system instruction from then on. */
+const MAX_CONDITIONS = 20;
+const MAX_CONDITION_LENGTH = 80;
 
 /**
  * Upsert the Convex row for the signed-in Clerk user.
@@ -55,5 +59,60 @@ export const getCurrentUser = query({
 
   handler: async (ctx) => {
     return await getAuthedUser(ctx);
+  },
+});
+
+/**
+ * The conditions the assistant should weigh on every turn, whether or not the
+ * current messages mention them. Written from the health profile sheet in
+ * components/HealthProfileSheet.tsx.
+ */
+export const updateHealthConditions = mutation({
+  args: {
+    healthConditions: v.array(v.string()),
+  },
+
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+
+    const seen = new Set<string>();
+    const healthConditions: string[] = [];
+
+    for (const raw of args.healthConditions) {
+      const condition = raw.trim().slice(0, MAX_CONDITION_LENGTH);
+      const key = condition.toLowerCase();
+
+      if (condition === "" || seen.has(key)) {
+        continue;
+      }
+
+      seen.add(key);
+      healthConditions.push(condition);
+
+      if (healthConditions.length >= MAX_CONDITIONS) {
+        break;
+      }
+    }
+
+    await ctx.db.patch(user._id, {
+      healthConditions,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+/**
+ * Internal: convex/chat.ts runs scheduled, with no caller identity, so it
+ * looks the profile up by the conversation's owner.
+ */
+export const getHealthConditions = internalQuery({
+  args: {
+    userId: v.id("users"),
+  },
+
+  handler: async (ctx, args): Promise<string[]> => {
+    const user = await ctx.db.get(args.userId);
+
+    return user?.healthConditions ?? [];
   },
 });

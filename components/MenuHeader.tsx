@@ -1,54 +1,64 @@
 import { useState } from "react";
-import { useConvexAuth, useMutation, useQuery } from "convex/react";
-import { api } from "@/convex/_generated/api";
-import { Alert, Modal, Pressable, TouchableOpacity } from "react-native";
-import { EllipsisVertical, Trash2, User } from "lucide-react-native";
+import { Modal, Pressable, TouchableOpacity } from "react-native";
+import {
+  EllipsisVertical,
+  HeartPulse,
+  MessagesSquare,
+  SquarePen,
+  User,
+} from "lucide-react-native";
+import type { LucideIcon } from "lucide-react-native";
 import { UserProfileView } from "@clerk/expo/native";
+import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { Box } from "@/components/ui/box";
 import { HStack } from "@/components/ui/hstack";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
+import { ConversationSheet } from "./ConversationSheet";
+import { HealthProfileSheet } from "./HealthProfileSheet";
 
-export function MenuHeader() {
-  const [menuVisible, setMenuVisible] = useState(false);
-  const [isAuthOpen, setIsAuthOpen] = useState(false);
-  const { isAuthenticated } = useConvexAuth();
-  const deleteConversation = useMutation(api.conversations.deleteConversation);
-  const conversations = useQuery(
-    api.conversations.listConversations,
-    isAuthenticated ? {} : "skip",
+type MenuHeaderProps = {
+  conversations: Doc<"conversations">[];
+  conversationId?: Id<"conversations">;
+  onSelectConversation: (id: Id<"conversations">) => void;
+  onNewConversation: () => void;
+};
+
+type MenuItemProps = {
+  icon: LucideIcon;
+  label: string;
+  onPress: () => void;
+};
+
+function MenuItem({ icon, label, onPress }: MenuItemProps) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      accessibilityRole="button"
+      className="rounded-lg p-2.5 active:bg-accent"
+    >
+      <HStack space="sm" className="items-center">
+        <Icon as={icon} size="sm" className="text-popover-foreground" />
+        <Text size="sm" className="font-medium text-popover-foreground">
+          {label}
+        </Text>
+      </HStack>
+    </TouchableOpacity>
   );
+}
 
-  if (conversations === undefined) {
-    return null;
-  }
+export function MenuHeader({
+  conversations,
+  conversationId,
+  onSelectConversation,
+  onNewConversation,
+}: MenuHeaderProps) {
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [isAccountOpen, setIsAccountOpen] = useState(false);
+  const [isChatsOpen, setIsChatsOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
 
-  const item = conversations[0];
-
-  const handleDeleteChat = () => {
-    Alert.alert(
-      "Delete Conversation",
-      "Are you sure you want to delete this conversation?",
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            await deleteConversation({
-              conversationId: item._id,
-            });
-          },
-        },
-      ],
-    );
-    setMenuVisible(false);
-  };
-
-  const isDeleteDisabled = !item;
+  const close = () => setMenuVisible(false);
 
   return (
     <>
@@ -68,49 +78,68 @@ export function MenuHeader() {
             accessibilityRole="button"
             accessibilityLabel="Close menu"
             className="absolute bottom-0 left-0 right-0 top-0 z-40 h-[1000%] w-[1000%]"
-            onPress={() => setMenuVisible(false)}
+            onPress={close}
           />
-          <Box className="absolute right-0 top-12 z-50 w-48 rounded-xl border border-border bg-popover p-1.5 shadow-lg">
-            <TouchableOpacity
+          <Box className="absolute right-0 top-12 z-50 w-52 rounded-xl border border-border bg-popover p-1.5 shadow-lg">
+            <MenuItem
+              icon={SquarePen}
+              label="New chat"
               onPress={() => {
-                setMenuVisible(false);
-                setIsAuthOpen(true);
+                close();
+                onNewConversation();
               }}
-              className="rounded-lg p-2.5 active:bg-accent"
-            >
-              <HStack space="sm" className="items-center">
-                <Icon as={User} size="sm" className="text-popover-foreground" />
-                <Text size="sm" className="font-medium text-popover-foreground">
-                  Account
-                </Text>
-              </HStack>
-            </TouchableOpacity>
+            />
 
-            {item && item.title !== undefined && (
-              <TouchableOpacity
-                disabled={isDeleteDisabled}
-                onPress={handleDeleteChat}
-                className="rounded-lg p-2.5 active:bg-accent"
-              >
-                <HStack space="sm" className="items-center">
-                  <Icon as={Trash2} size="sm" className="text-destructive" />
-                  <Text size="sm" className="font-medium text-destructive">
-                    Delete Chat
-                  </Text>
-                </HStack>
-              </TouchableOpacity>
-            )}
+            <MenuItem
+              icon={MessagesSquare}
+              label="Your chats"
+              onPress={() => {
+                close();
+                setIsChatsOpen(true);
+              }}
+            />
+
+            <MenuItem
+              icon={HeartPulse}
+              label="Health profile"
+              onPress={() => {
+                close();
+                setIsProfileOpen(true);
+              }}
+            />
+
+            <MenuItem
+              icon={User}
+              label="Account"
+              onPress={() => {
+                close();
+                setIsAccountOpen(true);
+              }}
+            />
           </Box>
         </>
       )}
 
+      <ConversationSheet
+        visible={isChatsOpen}
+        onClose={() => setIsChatsOpen(false)}
+        conversations={conversations}
+        conversationId={conversationId}
+        onSelect={onSelectConversation}
+      />
+
+      <HealthProfileSheet
+        visible={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
+      />
+
       <Modal
         animationType="slide"
-        visible={isAuthOpen}
+        visible={isAccountOpen}
         presentationStyle="pageSheet"
-        onRequestClose={() => setIsAuthOpen(false)}
+        onRequestClose={() => setIsAccountOpen(false)}
       >
-        <UserProfileView onDismiss={() => setIsAuthOpen(false)} />
+        <UserProfileView onDismiss={() => setIsAccountOpen(false)} />
       </Modal>
     </>
   );

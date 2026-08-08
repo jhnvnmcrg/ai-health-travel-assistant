@@ -1,144 +1,117 @@
-import { action } from "./_generated/server";
+import { internalAction } from "./_generated/server";
 import { v } from "convex/values";
-import { api, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 
-import {
-  runHealthTravelAssistant,
-  type ResolvedLocation,
-} from "./ai/orchestrator";
+import { runHealthTravelAssistant } from "./ai/orchestrator";
 import { generateConversationTitle } from "./ai/generateConversationTitle";
-
-/** ~5km — loose enough to survive the model rounding the coordinates it echoes. */
-const COORDINATE_TOLERANCE = 0.05;
-
-/**
- * Names the reply's coordinates using what the geocoder actually resolved. With
- * several lookups in one turn the coordinates have to agree, otherwise the name
- * is dropped — a wrong place name on health advice is worse than none.
- */
-function resolveLocationName(
-  locations: ResolvedLocation[],
-  metadata: { latitude: number; longitude: number } | undefined,
-): string | undefined {
-  if (!metadata || locations.length === 0) {
-    return undefined;
-  }
-
-  if (locations.length === 1) {
-    return locations[0].name;
-  }
-
-  const match = locations.find(
-    (location) =>
-      Math.abs(location.latitude - metadata.latitude) < COORDINATE_TOLERANCE &&
-      Math.abs(location.longitude - metadata.longitude) < COORDINATE_TOLERANCE,
-  );
-
-  return match?.name;
-}
-
-// The reply is fully generated before this loop starts, so the "streaming" is
-// cosmetic. Each chunk is a separate mutation — keep the chunk coarse so a long
-// reply costs tens of writes rather than hundreds.
-const CHUNK_SIZE = 40;
-const CHUNK_DELAY_MS = 40;
+import type { EnvironmentReading } from "./services/environmentService";
+import type { SafetyVerdict } from "./ai/types";
 
 const FAILURE_TEXT =
   "Sorry — I couldn't put together travel health advice just now. Please send your message again in a moment.";
 
-export const processUserMessage = action({
+/**
+ * The stored metadata is the tool's own reading plus the verdict the model
+ * reached about it. `locationName` is dropped when the geocoder gave nothing
+ * usable rather than stored empty.
+ */
+function buildEnvironmentalMetadata(
+  environment: EnvironmentReading | undefined,
+  safetyVerdict: SafetyVerdict,
+) {
+  if (!environment) {
+    return undefined;
+  }
+
+  const { locationName, ...reading } = environment;
+
+  return {
+    ...reading,
+    ...(locationName ? { locationName } : {}),
+    safetyVerdict,
+  };
+}
+
+/**
+ * Internal, and scheduled by `messages.createMessage` once that mutation has
+ * verified the caller owns the conversation. It is unreachable from a client,
+ * so there is no ownership check to repeat here.
+ */
+export const processUserMessage = internalAction({
   args: {
     conversationId: v.id("conversations"),
-    text: v.string(),
   },
 
   handler: async (ctx, args) => {
-    // Ownership gate: this throws unless the signed-in user owns the
-    // conversation. Everything below runs through internal mutations, which
-    // skip their own checks because of it.
-    const conversation = await ctx.runQuery(api.conversations.getConversation, {
-      conversationId: args.conversationId,
-    });
-
-    if (!conversation.title) {
-      try {
-        const title = await generateConversationTitle(args.text);
-
-        await ctx.runMutation(internal.conversations.updateTitle, {
-          conversationId: args.conversationId,
-          title,
-        });
-      } catch (error) {
-        console.warn("Failed to generate conversation title:", error);
-      }
-    }
-
-    let assistantText: string;
-    let environmentalMetadata;
-    let nearbyHospitals;
-
-    try {
-      const { response: aiResponse, locations } =
-        await runHealthTravelAssistant(ctx, args.conversationId);
-
-      assistantText = aiResponse.advice;
-
-      const locationName = resolveLocationName(
-        locations,
-        aiResponse.environmentalMetadata,
-      );
-
-      environmentalMetadata = aiResponse.environmentalMetadata
-        ? {
-            ...aiResponse.environmentalMetadata,
-            safetyVerdict: aiResponse.safetyVerdict,
-            ...(locationName ? { locationName } : {}),
-          }
-        : undefined;
-
-      nearbyHospitals = aiResponse.nearbyHospitals ?? undefined;
-    } catch (error) {
-      // A failing tool (geocode miss, Open-Meteo outage) or an exhausted Gemini
-      // retry used to abort silently, leaving the user's message unanswered.
-      console.error("Health travel assistant failed:", error);
-
-      await ctx.runMutation(internal.messages.createErrorMessage, {
-        conversationId: args.conversationId,
-        text: FAILURE_TEXT,
-      });
-
-      return;
-    }
-
-    const streamingMessageId = await ctx.runMutation(
+    // Created before generation starts, so the placeholder appears while the
+    // tools are still running rather than after them.
+    const messageId = await ctx.runMutation(
       internal.messages.createStreamingMessage,
-      {
-        conversationId: args.conversationId,
-      },
+      { conversationId: args.conversationId },
     );
 
     try {
-      for (let i = 0; i < assistantText.length; i += CHUNK_SIZE) {
-        const chunk = assistantText.slice(i, i + CHUNK_SIZE);
+      const conversation = await ctx.runQuery(internal.conversations.getById, {
+        conversationId: args.conversationId,
+      });
 
-        await ctx.runMutation(internal.messages.appendToStreamingMessage, {
-          messageId: streamingMessageId,
-          textChunk: chunk,
-        });
-
-        await new Promise((resolve) => setTimeout(resolve, CHUNK_DELAY_MS));
+      if (!conversation) {
+        throw new Error("Conversation not found.");
       }
 
+      if (!conversation.title) {
+        // Best-effort: a conversation without a title is cosmetic, and not a
+        // reason to fail the reply the user is waiting for.
+        try {
+          const firstMessage = await ctx.runQuery(
+            internal.messages.getFirstUserMessageText,
+            { conversationId: args.conversationId },
+          );
+
+          if (firstMessage) {
+            await ctx.runMutation(internal.conversations.updateTitle, {
+              conversationId: args.conversationId,
+              title: await generateConversationTitle(firstMessage),
+            });
+          }
+        } catch (error) {
+          console.warn("Failed to generate conversation title:", error);
+        }
+      }
+
+      const healthConditions = await ctx.runQuery(
+        internal.users.getHealthConditions,
+        { userId: conversation.userId },
+      );
+
+      const run = await runHealthTravelAssistant(
+        ctx,
+        args.conversationId,
+        healthConditions,
+        async (adviceSoFar) => {
+          await ctx.runMutation(internal.messages.updateStreamingMessage, {
+            messageId,
+            text: adviceSoFar,
+          });
+        },
+      );
+
       await ctx.runMutation(internal.messages.finishStreamingMessage, {
-        messageId: streamingMessageId,
-        environmentalMetadata,
-        nearbyHospitals,
+        messageId,
+        text: run.response.advice,
+        environmentalMetadata: buildEnvironmentalMetadata(
+          run.environment,
+          run.response.safetyVerdict,
+        ),
+        nearbyHospitals: run.hospitals,
       });
     } catch (error) {
-      console.error("Failed while writing the assistant reply:", error);
+      // A failing tool (geocode miss, Open-Meteo outage) or an exhausted Gemini
+      // retry leaves a visible row rather than an unanswered message.
+      console.error("Health travel assistant failed:", error);
 
       await ctx.runMutation(internal.messages.failMessage, {
-        messageId: streamingMessageId,
+        messageId,
         fallbackText: FAILURE_TEXT,
       });
     }

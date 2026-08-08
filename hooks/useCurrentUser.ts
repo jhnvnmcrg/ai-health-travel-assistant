@@ -17,6 +17,8 @@ export function useCurrentUser() {
     clerkUser: user,
     convexUser,
     isLoading:
-      !isLoaded || isAuthLoading || (isAuthenticated && convexUser === undefined),
+      !isLoaded ||
+      isAuthLoading ||
+      (isAuthenticated && convexUser === undefined),
   };
 }

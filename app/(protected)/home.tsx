@@ -14,8 +14,12 @@ export default function HomeScreen() {
     setMessage,
     sendMessage,
     isSending,
+    isResponding,
     isReady,
     conversationId,
+    conversations,
+    startNewConversation,
+    selectConversation,
     error,
   } = useChat();
 
@@ -46,7 +50,12 @@ export default function HomeScreen() {
         keyboardVerticalOffset={0}
       >
         <Box className="flex-1 bg-background">
-          <ChatHeader />
+          <ChatHeader
+            conversations={conversations}
+            conversationId={conversationId}
+            onSelectConversation={selectConversation}
+            onNewConversation={startNewConversation}
+          />
 
           <Box className="flex-1">
             <MessageList
@@ -70,7 +79,9 @@ export default function HomeScreen() {
             value={message}
             onChangeText={setMessage}
             onSend={sendMessage}
-            isSending={isSending || isOffline || !isReady}
+            // Blocked while the assistant is mid-reply, so two turns cannot
+            // interleave in the same conversation.
+            isSending={isSending || isResponding || isOffline || !isReady}
           />
         </Box>
       </KeyboardAvoidingView>

@@ -57,14 +57,18 @@ export default function ProtectedLayout() {
     !isLoaded || (isSignedIn && (isAuthLoading || (!isSynced && !syncError)));
 
   useEffect(() => {
-    if (!isConnecting) {
-      setIsSlow(false);
-      return;
-    }
+    if (!isConnecting) return;
 
     const timer = setTimeout(() => setIsSlow(true), SLOW_CONNECT_MS);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+
+      // Reset on the way out rather than in the effect body: a setState in the
+      // body runs synchronously during render and cascades, and undoing what
+      // the timer above may have set is what cleanup is for.
+      setIsSlow(false);
+    };
   }, [isConnecting]);
 
   useEffect(() => {

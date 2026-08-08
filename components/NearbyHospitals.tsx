@@ -35,7 +35,10 @@ export function NearbyHospitals({ hospitals, origin }: NearbyHospitalsProps) {
       <VStack space="sm">
         <HStack space="xs" className="items-center">
           <Icon as={Hospital} size="xs" className="text-muted-foreground" />
-          <Text size="xs" className="uppercase tracking-wide text-muted-foreground">
+          <Text
+            size="xs"
+            className="uppercase tracking-wide text-muted-foreground"
+          >
             Nearest care
           </Text>
         </HStack>

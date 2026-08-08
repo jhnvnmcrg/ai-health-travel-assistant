@@ -1,4 +1,9 @@
-import { internalMutation, mutation, query } from "./_generated/server";
+import {
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+} from "./_generated/server";
 import { v } from "convex/values";
 import { getAuthedUser, requireConversation, requireUser } from "./lib/auth";
 
@@ -17,6 +22,21 @@ export const createConversation = mutation({
       createdAt: now,
       updatedAt: now,
     });
+  },
+});
+
+/**
+ * Internal: convex/chat.ts runs as a scheduled action with no caller identity,
+ * so it reads the conversation through this rather than the ownership-checked
+ * public query. `messages.createMessage` verified ownership before scheduling.
+ */
+export const getById = internalQuery({
+  args: {
+    conversationId: v.id("conversations"),
+  },
+
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.conversationId);
   },
 });
 
@@ -68,9 +88,12 @@ export const listConversations = query({
       return [];
     }
 
+    // Most recently active first — the UI treats `conversations[0]` as the
+    // current conversation, so this has to follow `updatedAt`, not creation
+    // order.
     return await ctx.db
       .query("conversations")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .withIndex("by_user_updated", (q) => q.eq("userId", user._id))
       .order("desc")
       .collect();
   },

@@ -11,7 +11,8 @@ type ChatMessageProps = {
 };
 
 export function ChatMessage({ message }: ChatMessageProps) {
-  const { role, text, status, environmentalMetadata, nearbyHospitals } = message;
+  const { role, text, status, environmentalMetadata, nearbyHospitals } =
+    message;
 
   if (status === "error") {
     return (

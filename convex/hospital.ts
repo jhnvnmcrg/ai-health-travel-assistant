@@ -9,6 +9,14 @@ const OVERPASS_ENDPOINTS = [
 
 const REQUEST_TIMEOUT_MS = 15000;
 
+/** The subset of an Overpass element this uses. */
+type OverpassElement = {
+  lat?: number;
+  lon?: number;
+  center?: { lat?: number; lon?: number };
+  tags?: { name?: string };
+};
+
 async function queryOverpass(endpoint: string, query: string) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -55,17 +63,28 @@ out center;
 
         const json = await response.json();
 
-        const hospitals = (json.elements ?? [])
-          .map((hospital: any) => ({
-            name: hospital.tags?.name ?? "Unnamed Hospital",
-            latitude: hospital.lat ?? hospital.center?.lat,
-            longitude: hospital.lon ?? hospital.center?.lon,
-          }))
-          .filter(
-            (hospital: any) =>
-              typeof hospital.latitude === "number" &&
-              typeof hospital.longitude === "number",
-          );
+        const elements: OverpassElement[] = Array.isArray(json?.elements)
+          ? json.elements
+          : [];
+
+        // `node` carries its own coordinates; `way` and `relation` only get
+        // them from `out center`.
+        const hospitals = elements.flatMap((element) => {
+          const latitude = element.lat ?? element.center?.lat;
+          const longitude = element.lon ?? element.center?.lon;
+
+          if (typeof latitude !== "number" || typeof longitude !== "number") {
+            return [];
+          }
+
+          return [
+            {
+              name: element.tags?.name?.trim() || "Unnamed Hospital",
+              latitude,
+              longitude,
+            },
+          ];
+        });
 
         return { hospitals };
       } catch (error) {

@@ -9,8 +9,8 @@ const chipStyle = tva({
   base: "self-start rounded-full px-3 py-1",
   variants: {
     verdict: {
-      "Safe": "bg-success-subtle",
-      "Caution": "bg-warning-subtle",
+      Safe: "bg-success-subtle",
+      Caution: "bg-warning-subtle",
       "High Risk": "bg-destructive-subtle",
     },
   },
@@ -20,8 +20,8 @@ const dotStyle = tva({
   base: "h-1.5 w-1.5 rounded-full",
   variants: {
     verdict: {
-      "Safe": "bg-success",
-      "Caution": "bg-warning",
+      Safe: "bg-success",
+      Caution: "bg-warning",
       "High Risk": "bg-destructive",
     },
   },
@@ -31,8 +31,8 @@ const labelStyle = tva({
   base: "font-semibold uppercase tracking-widest",
   variants: {
     verdict: {
-      "Safe": "text-success",
-      "Caution": "text-warning",
+      Safe: "text-success",
+      Caution: "text-warning",
       "High Risk": "text-destructive",
     },
   },

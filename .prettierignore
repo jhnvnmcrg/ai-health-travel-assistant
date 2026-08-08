@@ -1,0 +1,15 @@
+# Regenerated — `npx convex dev` rewrites these.
+convex/_generated/
+
+# Vendored gluestack-ui primitives; `npx gluestack-ui add <component>` rewrites
+# them, so reformatting only creates diff noise on the next regeneration.
+components/ui/
+
+# Vendored skills, tracked by hash in skills-lock.json.
+.agents/
+.claude/
+
+node_modules/
+.expo/
+dist/
+package-lock.json

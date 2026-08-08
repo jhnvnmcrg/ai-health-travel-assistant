@@ -3,16 +3,21 @@ import { HStack } from "@/components/ui/hstack";
 import { Text } from "@/components/ui/text";
 import { VStack } from "@/components/ui/vstack";
 
+/**
+ * Every metric is optional because the upstream feeds have real coverage gaps.
+ * A missing one is left out of the strip rather than shown as zero — "PM2.5 0"
+ * reads as pristine air, which is the opposite of "we don't know".
+ */
 type EnvironmentMetadata = {
-  temperature: number;
-  humidity: number;
-  windSpeed: number;
-  uvIndex: number;
-  rainProbability: number;
-  heatIndex: number;
-  pm25: number;
-  pm10: number;
-  altitude: number;
+  temperature?: number;
+  humidity?: number;
+  windSpeed?: number;
+  uvIndex?: number;
+  rainProbability?: number;
+  heatIndex?: number;
+  pm25?: number;
+  pm10?: number;
+  altitude?: number;
 };
 
 type EnvironmentSummaryProps = {
@@ -20,28 +25,39 @@ type EnvironmentSummaryProps = {
 };
 
 /**
- * The `environmentalMetadata` the assistant fetched for this reply. Values are
- * shown as-is (rounded) — nothing is derived or re-interpreted here.
+ * The readings the assistant's tools returned for this reply. Values are shown
+ * as-is (rounded) — nothing is derived or re-interpreted here.
  */
 export function EnvironmentSummary({ metadata }: EnvironmentSummaryProps) {
   const metrics = [
-    { label: "Heat index", value: `${Math.round(metadata.heatIndex)}°C` },
-    { label: "Temp", value: `${Math.round(metadata.temperature)}°C` },
-    { label: "UV", value: `${Math.round(metadata.uvIndex)}` },
-    { label: "PM2.5", value: `${Math.round(metadata.pm25)}` },
-    { label: "PM10", value: `${Math.round(metadata.pm10)}` },
-    { label: "Humidity", value: `${Math.round(metadata.humidity)}%` },
-    { label: "Wind", value: `${Math.round(metadata.windSpeed)} km/h` },
-    { label: "Rain", value: `${Math.round(metadata.rainProbability)}%` },
-    { label: "Elevation", value: `${Math.round(metadata.altitude)} m` },
-  ];
+    { label: "Heat index", value: metadata.heatIndex, unit: "°C" },
+    { label: "Temp", value: metadata.temperature, unit: "°C" },
+    { label: "UV", value: metadata.uvIndex, unit: "" },
+    { label: "PM2.5", value: metadata.pm25, unit: "" },
+    { label: "PM10", value: metadata.pm10, unit: "" },
+    { label: "Humidity", value: metadata.humidity, unit: "%" },
+    { label: "Wind", value: metadata.windSpeed, unit: " km/h" },
+    { label: "Rain", value: metadata.rainProbability, unit: "%" },
+    { label: "Elevation", value: metadata.altitude, unit: " m" },
+  ].flatMap(({ label, value, unit }) =>
+    value === undefined
+      ? []
+      : [{ label, value: `${Math.round(value)}${unit}` }],
+  );
+
+  if (metrics.length === 0) {
+    return null;
+  }
 
   return (
     <Box className="border-t border-border pt-3">
       <HStack className="flex-wrap gap-x-5 gap-y-3">
         {metrics.map((metric) => (
           <VStack key={metric.label}>
-            <Text size="xs" className="uppercase tracking-wide text-muted-foreground">
+            <Text
+              size="xs"
+              className="uppercase tracking-wide text-muted-foreground"
+            >
               {metric.label}
             </Text>
             <Text size="sm" className="font-medium text-foreground">
