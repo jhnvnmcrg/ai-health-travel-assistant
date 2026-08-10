@@ -1,4 +1,9 @@
-import { ApiError, type Content, type FunctionCall } from "@google/genai";
+import {
+  ApiError,
+  type Content,
+  type FunctionCall,
+  type Part,
+} from "@google/genai";
 import { gemini } from "./client";
 import { environmentTool } from "./tools";
 import { hospitalTool } from "./hospitalTool";
@@ -20,6 +25,15 @@ export type ChatTurn = {
   /** Raw model text for this turn, fences and header included. */
   text: string;
   functionCalls: FunctionCall[];
+  /**
+   * The model's own parts, verbatim, for replaying this turn back as history.
+   *
+   * Gemini 3 attaches a `thoughtSignature` to function-call parts, and it
+   * lives on the **Part**, not on the `FunctionCall` inside it. Rebuilding the
+   * turn from `functionCalls` alone drops the signature, and the next request
+   * is rejected with `400 Function call is missing a thought_signature`.
+   */
+  parts: Part[];
 };
 
 /**
@@ -68,6 +82,7 @@ export async function generateChatTurn(
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     let text = "";
+    const parts: Part[] = [];
     const functionCalls: FunctionCall[] = [];
     let flushedLength = 0;
 
@@ -87,11 +102,22 @@ export async function generateChatTurn(
       });
 
       for await (const chunk of stream) {
-        text += chunk.text ?? "";
+        // Walked part by part rather than through the `chunk.text` and
+        // `chunk.functionCalls` getters: those hand back only the extracted
+        // values, discarding the thought signature that has to be replayed —
+        // and `chunk.text` logs a warning on every chunk that carries a tool
+        // call alongside text.
+        for (const part of chunk.candidates?.[0]?.content?.parts ?? []) {
+          parts.push(part);
 
-        const calls = chunk.functionCalls ?? [];
-        if (calls.length > 0) {
-          functionCalls.push(...calls);
+          if (part.functionCall) {
+            functionCalls.push(part.functionCall);
+          }
+
+          // A `thought` part is the model's reasoning summary, not its reply.
+          if (typeof part.text === "string" && !part.thought) {
+            text += part.text;
+          }
         }
 
         if (!onAdvice || functionCalls.length > 0) {
@@ -113,7 +139,7 @@ export async function generateChatTurn(
         }
       }
 
-      return { text, functionCalls };
+      return { text, functionCalls, parts };
     } catch (error) {
       lastError = error;
 

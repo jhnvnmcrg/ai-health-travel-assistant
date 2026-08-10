@@ -5,7 +5,7 @@ import type { EnvironmentReading } from "../services/environmentService";
 import {
   appendToolResults,
   buildGeminiContents,
-  modelTurnFromCalls,
+  type ToolResult,
 } from "./context";
 import { generateChatTurn } from "./generate";
 import { parseAIResponse } from "./parseResponse";
@@ -196,7 +196,7 @@ export async function runHealthTravelAssistant(
       throw new Error("The AI made too many tool calls without finishing.");
     }
 
-    const results: { name: string; result: unknown }[] = [];
+    const results: ToolResult[] = [];
 
     for (const functionCall of turn.functionCalls) {
       if (!functionCall.name) continue;
@@ -231,13 +231,10 @@ export async function runHealthTravelAssistant(
         }
       }
 
-      results.push({ name: toolName, result });
+      results.push({ name: toolName, id: functionCall.id, result });
     }
 
-    contents = appendToolResults(
-      contents,
-      modelTurnFromCalls(turn.functionCalls),
-      results,
-    );
+    // `turn.parts`, not the function calls — see appendToolResults.
+    contents = appendToolResults(contents, turn.parts, results);
   }
 }

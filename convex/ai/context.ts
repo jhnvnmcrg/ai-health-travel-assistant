@@ -1,8 +1,19 @@
-import { Content, FunctionCall } from "@google/genai";
+import { Content, Part } from "@google/genai";
 
 type ContextMessage = {
   role: "user" | "assistant";
   text: string;
+};
+
+export type ToolResult = {
+  name: string;
+  /**
+   * The id of the call this answers, when the model supplied one. Echoing it
+   * back is how two parallel calls to the same tool — "compare Baguio and
+   * Davao" — are told apart, since matching on name alone cannot.
+   */
+  id?: string;
+  result: unknown;
 };
 
 export function buildGeminiContents(history: ContextMessage[]): Content[] {
@@ -16,28 +27,31 @@ export function buildGeminiContents(history: ContextMessage[]): Content[] {
   }));
 }
 
-/**
- * Rebuilds the model's tool-calling turn from the calls that were streamed out
- * of it. The turn has to go back into the history before the results, or the
- * model sees answers to questions it has no record of asking.
- */
-export function modelTurnFromCalls(functionCalls: FunctionCall[]): Content {
-  return {
-    role: "model",
-    parts: functionCalls.map((functionCall) => ({ functionCall })),
-  };
-}
-
 export function appendToolResults(
   history: Content[],
-  modelTurn: Content,
-  results: { name: string; result: unknown }[],
+  modelParts: Part[],
+  results: ToolResult[],
 ): Content[] {
+  /**
+   * The model's turn goes back **verbatim**.
+   *
+   * Gemini 3 attaches an opaque `thoughtSignature` to function-call parts, and
+   * it sits on the Part rather than on the `FunctionCall` inside it. Rebuilding
+   * this turn from the FunctionCall objects loses the signature and the API
+   * rejects the follow-up request outright:
+   *
+   *   400 Function call is missing a thought_signature in functionCall parts.
+   *
+   * So: never reconstruct, only replay.
+   */
+  const modelTurn: Content = { role: "model", parts: modelParts };
+
   const functionResponseTurn: Content = {
     role: "user",
-    parts: results.map(({ name, result }) => ({
+    parts: results.map(({ name, id, result }) => ({
       functionResponse: {
         name,
+        ...(id ? { id } : {}),
         response:
           result !== null &&
           typeof result === "object" &&
