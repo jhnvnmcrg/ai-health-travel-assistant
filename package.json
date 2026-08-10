@@ -27,7 +27,7 @@
     "@legendapp/motion": "^2.5.3",
     "@react-native-community/netinfo": "11.4.1",
     "@react-navigation/native": "^7.1.8",
-    "convex": "^1.42.3",
+    "convex": "^1.43.0",
     "expo": "~54.0.36",
     "expo-build-properties": "~1.0.10",
     "expo-constants": "~18.0.13",
