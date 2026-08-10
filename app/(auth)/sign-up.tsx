@@ -8,6 +8,12 @@ import { Input, InputField } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
 import { VStack } from "@/components/ui/vstack";
 import { AuthField, AuthScreen } from "@/components/AuthScreen";
+import { StatusScreen } from "@/components/StatusScreen";
+
+/** "email_address" reads badly in a sentence. */
+function humanizeField(field: string): string {
+  return field.replace(/_/g, " ");
+}
 
 export default function SignUpScreen() {
   const { signUp, errors, fetchStatus } = useSignUp();
@@ -56,15 +62,51 @@ export default function SignUpScreen() {
   };
 
   if (signUp.status === "complete" || isSignedIn) {
-    return null;
+    // `finalize` is navigating. A bare `null` here is a blank screen for
+    // however long that takes.
+    return <StatusScreen message="Setting up your account..." />;
   }
 
   const isFetching = fetchStatus === "fetching";
 
+  /**
+   * Depending on how the Clerk instance is configured, sign-up can require
+   * fields this screen doesn't collect — a username, a phone number. Those used
+   * to fall through to the initial form, where pressing the button appeared to
+   * do nothing at all. Naming the requirement is not a fix for it, but it is
+   * the difference between a dead end and a dead end you can understand.
+   */
   if (
     signUp.status === "missing_requirements" &&
-    signUp.unverifiedFields.includes("email_address") &&
-    signUp.missingFields.length === 0
+    signUp.missingFields.length > 0
+  ) {
+    return (
+      <AuthScreen
+        title="One more thing"
+        subtitle="This account needs details this app can't collect yet."
+      >
+        <VStack space="lg">
+          <Text size="sm" className="text-muted-foreground">
+            Still required: {signUp.missingFields.map(humanizeField).join(", ")}
+            . Finish signing up on the web, or ask whoever manages this app to
+            drop the requirement.
+          </Text>
+
+          <Button
+            size="lg"
+            className="rounded-xl"
+            onPress={() => signUp.reset()}
+          >
+            <ButtonText>Start over</ButtonText>
+          </Button>
+        </VStack>
+      </AuthScreen>
+    );
+  }
+
+  if (
+    signUp.status === "missing_requirements" &&
+    signUp.unverifiedFields.includes("email_address")
   ) {
     return (
       <AuthScreen

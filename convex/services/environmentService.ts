@@ -60,14 +60,18 @@ export async function geocodeLocation(
     },
   );
 
+  // These messages are handed back to the model as a tool error, so they have
+  // to be worth reading: which of the two failures happened, and what was
+  // searched for. "Location not found: Bagiuo" is enough for the model to
+  // suggest the spelling the user probably meant.
   if (!geoResponse.ok) {
-    throw new Error("Unable to geocode location.");
+    throw new Error("The location lookup service is temporarily unavailable.");
   }
 
   const geo = await geoResponse.json();
 
   if (!Array.isArray(geo) || geo.length === 0) {
-    throw new Error("Location not found.");
+    throw new Error(`Location not found: ${location}`);
   }
 
   const latitude = Number(geo[0].lat);
@@ -105,7 +109,7 @@ export async function fetchConditions(
   ]);
 
   if (!weatherResponse.ok) {
-    throw new Error("Unable to fetch weather.");
+    throw new Error("The weather service is temporarily unavailable.");
   }
 
   const weather = await weatherResponse.json();

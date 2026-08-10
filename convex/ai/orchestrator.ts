@@ -24,6 +24,9 @@ const HOSPITAL_TOOL = "search_nearby_hospitals";
  */
 const HOSPITAL_ORIGIN_TOLERANCE = 0.02;
 
+/** Used when a tool throws something that isn't an Error. */
+const TOOL_FAILURE_TEXT = "The lookup failed.";
+
 type Coordinates = { latitude: number; longitude: number };
 
 type HospitalSearch = {
@@ -209,10 +212,38 @@ export async function runHealthTravelAssistant(
       }
 
       const args = (functionCall.args ?? {}) as Record<string, unknown>;
-      const result = await tool(ctx, args);
+
+      let result: unknown;
+
+      try {
+        result = await tool(ctx, args);
+      } catch (error) {
+        // A failing tool is information for the model, not the end of the
+        // turn. The common case is a place the geocoder can't resolve — a
+        // typo, or somewhere it simply doesn't know — and the model can ask
+        // about that far more usefully than a blanket apology can. Letting it
+        // propagate meant "Bagiuo" produced "please send your message again",
+        // which is both unhelpful and untrue: sending it again fails
+        // identically.
+        //
+        // `search_nearby_hospitals` already returns its failures this way; the
+        // environment tool is now consistent with it.
+        console.warn(`Tool ${toolName} failed:`, error);
+
+        results.push({
+          name: toolName,
+          id: functionCall.id,
+          result: {
+            error: error instanceof Error ? error.message : TOOL_FAILURE_TEXT,
+          },
+        });
+
+        continue;
+      }
 
       // Everything the UI shows is captured here, straight off the tool
-      // result. The model's own reply is never read for these numbers.
+      // result. The model's own reply is never read for these numbers. A tool
+      // that failed never reaches this point, so nothing partial is captured.
       if (toolName === ENVIRONMENT_TOOL) {
         const reading = readEnvironmentReading(result);
 

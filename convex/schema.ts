@@ -68,9 +68,9 @@ export default defineSchema({
 
     createdAt: v.number(),
     updatedAt: v.number(),
-  })
-    .index("by_clerkUserId", ["clerkUserId"])
-    .index("by_email", ["email"]),
+    // Only `by_clerkUserId` — identity always arrives as a Clerk subject, so
+    // an index on email was write cost with no reader.
+  }).index("by_clerkUserId", ["clerkUserId"]),
 
   conversations: defineTable({
     userId: v.id("users"),
