@@ -12,17 +12,35 @@ import { getAuthedUser, requireConversation, requireUser } from "./lib/auth";
 const CONVERSATION_LIST_LIMIT = 50;
 
 export const createConversation = mutation({
-  args: {
-    title: v.optional(v.string()),
-  },
+  args: {},
 
-  handler: async (ctx, args) => {
+  handler: async (ctx) => {
     const user = await requireUser(ctx);
+
+    // Reuse the most recent conversation if nothing has been said in it yet.
+    // "New chat" is a button someone can press three times in a row, and each
+    // press would otherwise leave an identical empty thread in the switcher.
+    const [latest] = await ctx.db
+      .query("conversations")
+      .withIndex("by_user_updated", (q) => q.eq("userId", user._id))
+      .order("desc")
+      .take(1);
+
+    if (latest) {
+      const firstMessage = await ctx.db
+        .query("messages")
+        .withIndex("by_conversation", (q) => q.eq("conversationId", latest._id))
+        .first();
+
+      if (!firstMessage) {
+        return latest._id;
+      }
+    }
+
     const now = Date.now();
 
     return await ctx.db.insert("conversations", {
       userId: user._id,
-      title: args.title,
       createdAt: now,
       updatedAt: now,
     });

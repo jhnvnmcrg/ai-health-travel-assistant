@@ -17,7 +17,14 @@ export function ChatMessage({ message }: ChatMessageProps) {
   if (status === "error") {
     return (
       <Box className="px-5 py-3">
-        <Box className="rounded-xl border border-destructive/40 bg-destructive-subtle px-4 py-3">
+        {/* Rust on cream is the whole signal that this went wrong, and colour
+            is exactly what a screen reader cannot see. */}
+        <Box
+          className="rounded-xl border border-destructive/40 bg-destructive-subtle px-4 py-3"
+          accessible={true}
+          accessibilityRole="alert"
+          accessibilityLabel={`Problem with this reply: ${text}`}
+        >
           <Text size="sm" className="text-destructive">
             {text}
           </Text>
@@ -32,7 +39,14 @@ export function ChatMessage({ message }: ChatMessageProps) {
         {/* The pill hugs its content, and the 4/5 wrapper caps how wide it grows.
             Assistant replies stay bubble-less, so the two never read alike. */}
         <Box className="w-4/5 items-end">
-          <Box className="rounded-2xl bg-muted px-4 py-2.5">
+          {/* Who said what is carried by alignment and background, so the
+              label has to restate it. */}
+          <Box
+            className="rounded-2xl bg-muted px-4 py-2.5"
+            accessible={true}
+            accessibilityRole="text"
+            accessibilityLabel={`You said: ${text}`}
+          >
             <Text className="text-foreground">{text}</Text>
           </Box>
         </Box>
@@ -45,7 +59,12 @@ export function ChatMessage({ message }: ChatMessageProps) {
   if (status === "streaming" && text === "") {
     return (
       <Box className="px-5 py-3">
-        <Text size="sm" className="text-muted-foreground">
+        <Text
+          size="sm"
+          className="text-muted-foreground"
+          accessibilityRole="text"
+          accessibilityLiveRegion="polite"
+        >
           Checking conditions...
         </Text>
       </Box>
@@ -61,6 +80,8 @@ export function ChatMessage({ message }: ChatMessageProps) {
               <Text
                 size="xs"
                 className="uppercase tracking-wide text-muted-foreground"
+                accessibilityRole="text"
+                accessibilityLabel={`Conditions for ${environmentalMetadata.locationName}`}
               >
                 {environmentalMetadata.locationName}
               </Text>
@@ -70,7 +91,15 @@ export function ChatMessage({ message }: ChatMessageProps) {
           </VStack>
         )}
 
-        <Text className="text-foreground">{text}</Text>
+        {/* Not `accessible` on the wrapper: that would collapse the verdict
+            chip, the metric strip and the hospital list into this one node. */}
+        <Text
+          className="text-foreground"
+          accessibilityRole="text"
+          accessibilityLabel={`Assistant: ${text}`}
+        >
+          {text}
+        </Text>
 
         {environmentalMetadata && (
           <EnvironmentSummary metadata={environmentalMetadata} />

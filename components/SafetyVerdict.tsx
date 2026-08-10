@@ -41,7 +41,15 @@ const labelStyle = tva({
 /** The stored `environmentalMetadata.safetyVerdict`, as a chip. */
 export function SafetyVerdict({ verdict }: { verdict: Verdict }) {
   return (
-    <Box className={chipStyle({ verdict })}>
+    // The colour is the fastest read for a sighted user and invisible to a
+    // screen reader, so the label says what the chip means rather than what
+    // it says.
+    <Box
+      className={chipStyle({ verdict })}
+      accessible={true}
+      accessibilityRole="text"
+      accessibilityLabel={`Safety verdict: ${verdict}`}
+    >
       <HStack space="xs" className="items-center">
         <Box className={dotStyle({ verdict })} />
         <Text size="xs" className={labelStyle({ verdict })}>

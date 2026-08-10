@@ -49,6 +49,13 @@ export function NearbyHospitals({ hospitals, origin }: NearbyHospitalsProps) {
               key={`${hospital.name}-${hospital.latitude}-${hospital.longitude}`}
               space="sm"
               className="items-baseline justify-between"
+              accessible={true}
+              accessibilityRole="text"
+              accessibilityLabel={
+                hospital.distance === undefined
+                  ? hospital.name
+                  : `${hospital.name}, ${formatDistance(hospital.distance)} away`
+              }
             >
               <Text size="sm" className="flex-1 text-foreground">
                 {hospital.name}

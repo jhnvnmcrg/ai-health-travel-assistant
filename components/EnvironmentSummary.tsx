@@ -51,9 +51,21 @@ export function EnvironmentSummary({ metadata }: EnvironmentSummaryProps) {
 
   return (
     <Box className="border-t border-border pt-3">
-      <HStack className="flex-wrap gap-x-5 gap-y-3">
+      <HStack
+        className="flex-wrap gap-x-5 gap-y-3"
+        accessibilityLabel="Conditions measured for this reply"
+      >
         {metrics.map((metric) => (
-          <VStack key={metric.label}>
+          // Each metric is one accessible node. Left as two loose Texts, a
+          // screen reader reads the strip as nine unattached fragments —
+          // "Heat index", "41°C", "Temp", "36°C" — with nothing joining a
+          // label to its value.
+          <VStack
+            key={metric.label}
+            accessible={true}
+            accessibilityRole="text"
+            accessibilityLabel={`${metric.label}: ${metric.value}`}
+          >
             <Text
               size="xs"
               className="uppercase tracking-wide text-muted-foreground"

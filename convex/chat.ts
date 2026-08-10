@@ -33,6 +33,41 @@ function buildEnvironmentalMetadata(
 }
 
 /**
+ * Names a new conversation from its opening message.
+ *
+ * Scheduled rather than awaited inside `processUserMessage`: it is a whole
+ * extra model round trip, and running it inline meant the first message of
+ * every conversation sat on "Checking conditions..." while a title the user
+ * cannot even see yet was written. A missing title is cosmetic — it must not
+ * cost the reply any latency, and it must not be able to fail the reply.
+ */
+export const generateTitle = internalAction({
+  args: {
+    conversationId: v.id("conversations"),
+  },
+
+  handler: async (ctx, args) => {
+    try {
+      const firstMessage = await ctx.runQuery(
+        internal.messages.getFirstUserMessageText,
+        { conversationId: args.conversationId },
+      );
+
+      if (!firstMessage) {
+        return;
+      }
+
+      await ctx.runMutation(internal.conversations.updateTitle, {
+        conversationId: args.conversationId,
+        title: await generateConversationTitle(firstMessage),
+      });
+    } catch (error) {
+      console.warn("Failed to generate conversation title:", error);
+    }
+  },
+});
+
+/**
  * Internal, and scheduled by `messages.createMessage` once that mutation has
  * verified the caller owns the conversation. It is unreachable from a client,
  * so there is no ownership check to repeat here.
@@ -57,26 +92,6 @@ export const processUserMessage = internalAction({
 
       if (!conversation) {
         throw new Error("Conversation not found.");
-      }
-
-      if (!conversation.title) {
-        // Best-effort: a conversation without a title is cosmetic, and not a
-        // reason to fail the reply the user is waiting for.
-        try {
-          const firstMessage = await ctx.runQuery(
-            internal.messages.getFirstUserMessageText,
-            { conversationId: args.conversationId },
-          );
-
-          if (firstMessage) {
-            await ctx.runMutation(internal.conversations.updateTitle, {
-              conversationId: args.conversationId,
-              title: await generateConversationTitle(firstMessage),
-            });
-          }
-        } catch (error) {
-          console.warn("Failed to generate conversation title:", error);
-        }
       }
 
       const healthConditions = await ctx.runQuery(

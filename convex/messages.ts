@@ -155,10 +155,18 @@ export const createMessage = mutation({
       respondingSince: now,
     });
 
-    // Ownership was checked above, so the scheduled action inherits it.
+    // Ownership was checked above, so the scheduled actions inherit it.
     await ctx.scheduler.runAfter(0, internal.chat.processUserMessage, {
       conversationId: args.conversationId,
     });
+
+    // Alongside the reply rather than in front of it — naming the conversation
+    // is a second model round trip, and the user is waiting on the first.
+    if (!conversation.title) {
+      await ctx.scheduler.runAfter(0, internal.chat.generateTitle, {
+        conversationId: args.conversationId,
+      });
+    }
 
     return messageId;
   },

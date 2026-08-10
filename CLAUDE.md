@@ -131,6 +131,12 @@ Every fallback in [convex/ai/parseResponse.ts](convex/ai/parseResponse.ts) force
 
 The three persisted fields are rendered by [components/ChatMessage.tsx](components/ChatMessage.tsx): `safetyVerdict` as a chip ([SafetyVerdict.tsx](components/SafetyVerdict.tsx)), `environmentalMetadata` as a metric strip ([EnvironmentSummary.tsx](components/EnvironmentSummary.tsx)), and `nearbyHospitals` as a ranked list ([NearbyHospitals.tsx](components/NearbyHospitals.tsx)).
 
+### Conversation titles
+
+`chat.generateTitle` is scheduled by `createMessage`, not awaited inside `processUserMessage`. It is a second model round trip, and running it inline meant the first message of every conversation sat on "Checking conditions..." while a title the user cannot see yet was written. A missing title is cosmetic; it must not cost the reply latency, and it must not be able to fail the reply.
+
+`createConversation` reuses the most recent conversation when nothing has been said in it. "New chat" is a button someone can press three times in a row, and each press would otherwise leave an identical empty thread in the switcher.
+
 ### The health profile
 
 `users.healthConditions` is appended to the system instruction on **every** turn by `buildSystemInstruction` in [convex/ai/systemPrompt.ts](convex/ai/systemPrompt.ts), not replayed as a message. The conversation window is finite, so "I have asthma" said once would otherwise scroll out and stop informing the advice — in an app whose prompt opens by telling the model to weigh the user's health conditions. Edited from [components/HealthProfileSheet.tsx](components/HealthProfileSheet.tsx).
@@ -192,6 +198,16 @@ Feature components compose `Box`/`VStack`/`HStack`/`Text`/`Heading` and `Icon as
 Three shells exist so layout doesn't get re-authored per screen: the four auth layouts (sign-in, its MFA step, sign-up, its verification step) share [components/AuthScreen.tsx](components/AuthScreen.tsx) (`AuthScreen` + `AuthField`); [components/StatusScreen.tsx](components/StatusScreen.tsx) is the full-screen spinner/message used by both `app/index.tsx` (Clerk's first frame) and the protected layout's auth-and-sync gate; and [components/SheetModal.tsx](components/SheetModal.tsx) backs the two sheets reachable from the header menu ([ConversationSheet.tsx](components/ConversationSheet.tsx), [HealthProfileSheet.tsx](components/HealthProfileSheet.tsx)).
 
 `MenuHeader` takes the conversation list and the selection callbacks as props rather than querying for them, so `useConversation` stays the single owner of which conversation is active.
+
+### Accessibility
+
+Almost everything this app conveys visually is conveyed by _colour or position_, which is exactly what a screen reader cannot see. Three places carry explicit labels for that reason, and they are easy to strip out by accident:
+
+- **`EnvironmentSummary`** labels each metric as one node (`accessible` + `Heat index: 41°C`). Left as two loose `Text`s, the strip reads as nine unattached fragments with nothing joining a label to its value.
+- **`SafetyVerdict`** and `status: "error"` rows announce what they _mean_ ("Safety verdict: Caution", `accessibilityRole="alert"`), because the rust/amber/green distinction is the entire signal otherwise.
+- **`ChatMessage`** restates the speaker ("You said:" / "Assistant:"), since who said what is carried only by alignment and background.
+
+Do **not** put `accessible={true}` on the assistant `VStack` — it collapses the verdict chip, metric strip and hospital list into a single unreadable node.
 
 [components/ui/gluestack-ui-provider/config.ts](components/ui/gluestack-ui-provider/config.ts) holds a hand-authored v4-style `vars()` palette (`--color-primary-500` etc.) that nothing imports — the live system is `global.css`. Don't style against those names.
 
