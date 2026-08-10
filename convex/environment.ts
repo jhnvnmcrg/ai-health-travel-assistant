@@ -19,18 +19,28 @@ function normalizeQuery(location: string): string {
   return location.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+type CachedGeocode = GeocodeResult & { fetchedAt: number };
+
+/**
+ * Returns the entry and lets the caller judge its age.
+ *
+ * The freshness test deliberately does not live here: a query is not rerun
+ * merely because time has advanced, so a `Date.now()` comparison inside one
+ * can answer from a moment that has passed — and reading the clock in a query
+ * costs cache reuse besides. Actions may read the clock freely.
+ */
 export const readGeocodeCache = internalQuery({
   args: {
     query: v.string(),
   },
 
-  handler: async (ctx, args): Promise<GeocodeResult | null> => {
+  handler: async (ctx, args): Promise<CachedGeocode | null> => {
     const cached = await ctx.db
       .query("geocodeCache")
       .withIndex("by_query", (q) => q.eq("query", args.query))
       .unique();
 
-    if (!cached || Date.now() - cached.fetchedAt > GEOCODE_TTL_MS) {
+    if (!cached) {
       return null;
     }
 
@@ -38,6 +48,7 @@ export const readGeocodeCache = internalQuery({
       locationName: cached.locationName,
       latitude: cached.latitude,
       longitude: cached.longitude,
+      fetchedAt: cached.fetchedAt,
     };
   },
 });
@@ -86,10 +97,13 @@ export const fetchLocationEnvironmentData = internalAction({
   handler: async (ctx, { location }): Promise<EnvironmentReading> => {
     const query = normalizeQuery(location);
 
-    let place: GeocodeResult | null = await ctx.runQuery(
+    const cached: CachedGeocode | null = await ctx.runQuery(
       internal.environment.readGeocodeCache,
       { query },
     );
+
+    let place: GeocodeResult | null =
+      cached && Date.now() - cached.fetchedAt <= GEOCODE_TTL_MS ? cached : null;
 
     if (!place) {
       place = await geocodeLocation(location);

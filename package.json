@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@clerk/expo": "^3.7.4",
+    "@convex-dev/rate-limiter": "^0.3.2",
     "@convex-dev/react-query": "^0.1.0",
     "@expo/html-elements": "^0.12.5",
     "@gluestack-style/react": "^1.0.57",

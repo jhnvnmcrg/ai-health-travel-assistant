@@ -75,6 +75,18 @@ export default defineSchema({
   conversations: defineTable({
     userId: v.id("users"),
     title: v.optional(v.string()),
+
+    /**
+     * When the in-flight reply started, or absent if none is running. Set by
+     * `messages.createMessage` as it schedules the reply and cleared when that
+     * reply finishes or fails.
+     *
+     * It is the lock that stops two turns interleaving in one conversation,
+     * and because it is a timestamp rather than a boolean, a reply that was
+     * killed mid-flight expires instead of wedging the conversation forever.
+     */
+    respondingSince: v.optional(v.number()),
+
     createdAt: v.number(),
     updatedAt: v.number(),
   })

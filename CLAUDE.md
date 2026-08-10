@@ -70,7 +70,7 @@ Anything only the server calls is `internalMutation`/`internalQuery`/`internalAc
 
 Sending a message ([hooks/useChat.ts](hooks/useChat.ts)):
 
-1. `messages.createMessage` validates (non-empty, ≤ `MAX_MESSAGE_LENGTH`, ≤ `RATE_LIMIT_MAX_MESSAGES` per minute), inserts the user row, bumps `updatedAt`, and **schedules** `internal.chat.processUserMessage`. That is the whole of what the client awaits.
+1. `messages.createMessage` validates (non-empty, ≤ `MAX_MESSAGE_LENGTH`, per-user token bucket), takes the conversation's reply lock, inserts the user row, bumps `updatedAt`, and **schedules** `internal.chat.processUserMessage`. That is the whole of what the client awaits.
 2. `chat.processUserMessage` is an `internalAction` — unreachable from a client, and running with no caller identity, which is why it reads the conversation through `internal.conversations.getById` instead of the ownership-checked public query. Step 1 did the ownership check before scheduling.
 3. It creates the streaming row **first**, so "Checking conditions..." is on screen while the tools run rather than after them. Every failure from here on has a row to land in.
 4. [convex/ai/orchestrator.ts](convex/ai/orchestrator.ts) loads `internal.messages.getConversationContext` (last `CONTEXT_MESSAGE_LIMIT` non-empty, non-error messages), builds the system instruction from the user's saved health conditions, and loops: generate → execute `functionCalls` via `toolRegistry` → append results → generate again, up to `MAX_TOOL_ROUNDS = 4`.
@@ -85,7 +85,16 @@ Two things about the streaming that are load-bearing:
 
 Failures are visible rather than silent: a throwing tool or an exhausted Gemini retry marks the row via `failMessage`, and `useChat` surfaces `ConvexError` messages (rate limit, length) verbatim while anything else gets a generic line — plain `Error` messages are redacted in production, which is why the user-facing throws use `ConvexError`. `ChatMessage` renders `status === "error"` rows in rust instead of cream. Partial advice is kept but prefixed with a truncation notice: health advice that stops early may be missing the sentence that mattered.
 
-Because the client no longer waits on the action, "the assistant is replying" is derived from the last message's `status === "streaming"` — `useChat` watches the same `listMessages` query `MessageList` is already subscribed to, and `home.tsx` disables the composer on it so two turns can't interleave.
+### The reply lock
+
+`conversations.respondingSince` is a timestamp, set by `createMessage` as it schedules the reply and cleared by `finishStreamingMessage`/`failMessage`. It does two jobs that a client-side "is it replying?" flag cannot:
+
+- **Two turns can't interleave.** The check runs inside a mutation, so two races cannot both observe an unlocked conversation. Deriving this from the last message's status left a real window — `createMessage` returns before the scheduled action has created the streaming row, and a fast second send in that gap started a second generation on the same conversation.
+- **A dead reply expires instead of wedging the thread.** If the action is killed before it can report anything (action timeout, a deploy landing mid-generation), the lock is stale rather than permanent: after `RESPONSE_TIMEOUT_MS` the next `createMessage` marks any stranded `streaming` row as errored and proceeds. `useChat` releases the composer on the same deadline via a single `setTimeout`, so the UI unlocks at the moment the server would accept a send. A boolean lock would have needed a cron to clean up; a timestamp needs nothing.
+
+`RESPONSE_TIMEOUT_MS` and `MAX_MESSAGE_LENGTH` live in [lib/chatLimits.ts](lib/chatLimits.ts) — a dependency-free module, so importing it into `convex/` doesn't drag React Native into the server bundle.
+
+Rate limiting is the `@convex-dev/rate-limiter` component, mounted in [convex/convex.config.ts](convex/convex.config.ts). The hand-rolled version it replaces counted recent rows inside the mutation, which races under concurrency and loses quota whenever a transaction rolls back. Adding a component means `npx convex codegen` (or `dev`) before `components.rateLimiter` exists in `_generated`.
 
 `getConversationContext` appends a compact `[Already fetched this conversation — …]` line to any assistant message carrying `environmentalMetadata`. That text exists only in the model's context, never in the database and never on screen; it is what lets "what about tomorrow?" reuse a reading instead of re-geocoding.
 
@@ -131,6 +140,16 @@ The three persisted fields are rendered by [components/ChatMessage.tsx](componen
 `gemini-3.5-flash-lite` for chat, streamed, with up to 3 attempts ([convex/ai/generate.ts](convex/ai/generate.ts)); `gemini-2.5-flash` for conversation titles ([convex/ai/generateConversationTitle.ts](convex/ai/generateConversationTitle.ts)).
 
 Retries are **classified**, not blanket: only 408/429/5xx and status-less network failures are retried. A 400 — a malformed request, or an unknown model id — is just as invalid on the third attempt, and retrying it turns a fast failure into a slow one.
+
+### Query shape
+
+`convex/_generated/ai/guidelines.md` is the authority here and is worth reading before touching `convex/`. Three of its rules bit this codebase:
+
+- **No unbounded `.collect()`.** `getConversationContext` read the entire thread to keep the last 20 messages of it, on every turn. It now scans newest-first with the exclusions pushed into the index scan and `.take(CONTEXT_MESSAGE_LIMIT)`. `listMessages` and `listConversations` are bounded too — past `MESSAGE_HISTORY_LIMIT` the oldest messages stop being fetched, which is the point to paginate if threads ever get that long.
+- **No wall clock in a query.** A query is not rerun merely because time passed, so a freshness test inside one can answer from a moment that has gone. `environment.readGeocodeCache` returns the entry and its `fetchedAt`; the **action** compares it against `GEOCODE_TTL_MS`.
+- **Batch large deletes.** `deleteConversation` removes the conversation row (which is what makes it vanish from the UI, since `listMessages` resolves ownership through it) and then schedules `deleteMessageBatch` to clear messages `DELETE_BATCH_SIZE` at a time. Deleting them all in one mutation would fail the whole delete on a long thread rather than part of it.
+
+One guideline is knowingly not followed: `convex/lib/auth.ts` keys identity on `identity.subject` where the guidelines prefer `tokenIdentifier`. The schema is keyed on `clerkUserId`, so changing it is a data migration, and `subject` is stable within a single Clerk instance — the guideline is about uniqueness across providers.
 
 ## Testing
 

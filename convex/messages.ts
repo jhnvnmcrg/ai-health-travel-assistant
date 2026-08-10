@@ -3,15 +3,18 @@ import {
   internalQuery,
   mutation,
   query,
+  type MutationCtx,
 } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
-import { internal } from "./_generated/api";
+import { MINUTE, RateLimiter } from "@convex-dev/rate-limiter";
+import { components, internal } from "./_generated/api";
 import {
   environmentalMetadataValidator,
   nearbyHospitalsValidator,
 } from "./schema";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { getOwnedConversation, requireConversation } from "./lib/auth";
+import { MAX_MESSAGE_LENGTH, RESPONSE_TIMEOUT_MS } from "../lib/chatLimits";
 
 /**
  * How many trailing messages are replayed to Gemini as conversation memory.
@@ -22,19 +25,56 @@ import { getOwnedConversation, requireConversation } from "./lib/auth";
 const CONTEXT_MESSAGE_LIMIT = 20;
 
 /**
- * The composer caps input at 500 characters, but that is a client-side
- * courtesy — this is the limit, because a direct call to this mutation is not
- * bound by the UI.
+ * How much of a conversation the client loads. Bounded rather than unbounded:
+ * `.collect()` here would read every message ever sent in the thread on every
+ * reactive update. Past this the oldest messages stop being fetched — if
+ * conversations ever run this long, this is the query to paginate.
  */
-const MAX_MESSAGE_LENGTH = 2000;
+const MESSAGE_HISTORY_LIMIT = 200;
 
 /**
  * Every message costs a Gemini turn plus up to three third-party lookups, so
- * the ceiling is per-user rather than per-request. Generous enough that no one
- * typing in good faith will ever see it.
+ * the ceiling is per-user rather than per-conversation. Generous enough that
+ * nobody typing in good faith will meet it.
  */
-const RATE_LIMIT_WINDOW_MS = 60_000;
-const RATE_LIMIT_MAX_MESSAGES = 12;
+const rateLimiter = new RateLimiter(components.rateLimiter, {
+  sendMessage: { kind: "token bucket", rate: 12, period: MINUTE, capacity: 12 },
+});
+
+const TRUNCATION_NOTICE =
+  "This reply was cut off before it finished — treat it as incomplete and ask again.";
+
+const ABANDONED_TEXT =
+  "This reply stopped partway through and never recovered. Please ask again.";
+
+/**
+ * Closes out a reply whose action died without reporting anything — an action
+ * timeout, or a deploy landing mid-generation.
+ *
+ * Doing this from `createMessage` rather than a sweeping cron means a
+ * conversation heals the moment someone tries to use it again, and there is no
+ * scheduled job to forget about.
+ */
+async function abandonInFlightReply(
+  ctx: MutationCtx,
+  conversationId: Id<"conversations">,
+) {
+  const stranded = await ctx.db
+    .query("messages")
+    .withIndex("by_conversation", (q) => q.eq("conversationId", conversationId))
+    .order("desc")
+    .filter((q) => q.eq(q.field("status"), "streaming"))
+    .take(5);
+
+  for (const message of stranded) {
+    await ctx.db.patch(message._id, {
+      status: "error",
+      text: message.text
+        ? `${TRUNCATION_NOTICE}\n\n${message.text}`
+        : ABANDONED_TEXT,
+    });
+  }
+}
 
 /**
  * The only message-writing mutation the client can call, so it is fixed to
@@ -54,12 +94,16 @@ export const createMessage = mutation({
   },
 
   handler: async (ctx, args) => {
-    await requireConversation(ctx, args.conversationId);
+    const { user, conversation } = await requireConversation(
+      ctx,
+      args.conversationId,
+    );
 
     const text = args.text.trim();
 
     // ConvexError, not Error: a production deployment redacts the message of a
-    // plain throw, and these three are meant to be read by the person typing.
+    // plain throw, and everything below is meant to be read by the person
+    // typing.
     if (!text) {
       throw new ConvexError("Message is empty.");
     }
@@ -72,23 +116,29 @@ export const createMessage = mutation({
 
     const now = Date.now();
 
-    const recent = await ctx.db
-      .query("messages")
-      .withIndex("by_conversation", (q) =>
-        q.eq("conversationId", args.conversationId),
-      )
-      .order("desc")
-      .take(RATE_LIMIT_MAX_MESSAGES * 3);
+    // One reply at a time. Checked here because a mutation is a transaction:
+    // two sends racing cannot both see an unlocked conversation, which a
+    // client-side "is it replying?" guard could never guarantee.
+    if (conversation.respondingSince !== undefined) {
+      if (now - conversation.respondingSince < RESPONSE_TIMEOUT_MS) {
+        throw new ConvexError(
+          "I'm still answering your last message — give me a moment.",
+        );
+      }
 
-    const sentInWindow = recent.filter(
-      (message) =>
-        message.role === "user" &&
-        message.createdAt > now - RATE_LIMIT_WINDOW_MS,
-    ).length;
+      await abandonInFlightReply(ctx, args.conversationId);
+    }
 
-    if (sentInWindow >= RATE_LIMIT_MAX_MESSAGES) {
+    // After the checks above, so a rejected send does not spend quota.
+    const status = await rateLimiter.limit(ctx, "sendMessage", {
+      key: user._id,
+    });
+
+    if (!status.ok) {
+      const seconds = Math.max(1, Math.ceil(status.retryAfter / 1000));
+
       throw new ConvexError(
-        "You're sending messages faster than I can answer them. Give it a moment.",
+        `You're sending messages faster than I can answer them. Try again in ${seconds}s.`,
       );
     }
 
@@ -100,7 +150,10 @@ export const createMessage = mutation({
       createdAt: now,
     });
 
-    await ctx.db.patch(args.conversationId, { updatedAt: now });
+    await ctx.db.patch(args.conversationId, {
+      updatedAt: now,
+      respondingSince: now,
+    });
 
     // Ownership was checked above, so the scheduled action inherits it.
     await ctx.scheduler.runAfter(0, internal.chat.processUserMessage, {
@@ -171,12 +224,12 @@ export const finishStreamingMessage = internalMutation({
       nearbyHospitals: args.nearbyHospitals,
     });
 
-    await ctx.db.patch(message.conversationId, { updatedAt: Date.now() });
+    await ctx.db.patch(message.conversationId, {
+      updatedAt: Date.now(),
+      respondingSince: undefined,
+    });
   },
 });
-
-const TRUNCATION_NOTICE =
-  "This reply was cut off before it finished — treat it as incomplete and ask again.";
 
 /** Marks a half-streamed message as failed so it cannot hang on "streaming". */
 export const failMessage = internalMutation({
@@ -203,6 +256,10 @@ export const failMessage = internalMutation({
       status: "error",
       text,
     });
+
+    await ctx.db.patch(message.conversationId, {
+      respondingSince: undefined,
+    });
   },
 });
 
@@ -220,13 +277,15 @@ export const listMessages = query({
       return [];
     }
 
-    return await ctx.db
+    const recent = await ctx.db
       .query("messages")
       .withIndex("by_conversation", (q) =>
         q.eq("conversationId", args.conversationId),
       )
-      .order("asc")
-      .collect();
+      .order("desc")
+      .take(MESSAGE_HISTORY_LIMIT);
+
+    return recent.reverse();
   },
 });
 
@@ -276,21 +335,25 @@ export const getConversationContext = internalQuery({
   },
 
   handler: async (ctx, args) => {
-    const messages = await ctx.db
+    // Newest-first with the exclusions pushed into the scan, so this reads the
+    // last N usable messages rather than the whole thread. This runs on every
+    // single turn — collecting the full history to keep the tail of it got
+    // steadily more expensive with every message sent.
+    const recent = await ctx.db
       .query("messages")
       .withIndex("by_conversation", (q) =>
         q.eq("conversationId", args.conversationId),
       )
-      .order("asc")
-      .collect();
+      .order("desc")
+      .filter((q) =>
+        q.and(q.neq(q.field("status"), "error"), q.neq(q.field("text"), "")),
+      )
+      .take(CONTEXT_MESSAGE_LIMIT);
 
-    return messages
-      .filter((message) => message.status !== "error" && message.text !== "")
-      .slice(-CONTEXT_MESSAGE_LIMIT)
-      .map((message) => ({
-        role: message.role,
-        text: `${message.text}${describeStoredConditions(message)}`,
-      }));
+    return recent.reverse().map((message) => ({
+      role: message.role,
+      text: `${message.text}${describeStoredConditions(message)}`,
+    }));
   },
 });
 

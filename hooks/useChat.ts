@@ -1,16 +1,17 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ConvexError } from "convex/values";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useConversation } from "@/hooks/useConversation";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { RESPONSE_TIMEOUT_MS } from "@/lib/chatLimits";
 
 const GENERIC_SEND_ERROR = "Your message couldn't be sent. Please try again.";
 
 /**
  * Server-side `ConvexError`s carry a message meant for the person typing (rate
- * limit, length). Anything else is redacted in production and is not something
- * a user could act on, so it gets the generic line.
+ * limit, length, "still answering"). Anything else is redacted in production
+ * and is not something a user could act on, so it gets the generic line.
  */
 function readSendError(error: unknown): string {
   if (error instanceof ConvexError && typeof error.data === "string") {
@@ -37,15 +38,35 @@ export function useChat() {
 
   const createMessage = useMutation(api.messages.createMessage);
 
-  // MessageList subscribes to this same query, so watching it here is free —
-  // and it is the only honest source for "the assistant is still writing",
-  // now that the client no longer waits on the action that writes it.
-  const messages = useQuery(
-    api.messages.listMessages,
-    conversationId ? { conversationId } : "skip",
-  );
+  // `respondingSince` is the server's own lock on the conversation, so the
+  // composer is disabled by the same fact that stops a second turn being
+  // accepted — rather than by a guess made from the last message's status.
+  const respondingSince = conversations.find(
+    (conversation) => conversation._id === conversationId,
+  )?.respondingSince;
 
-  const isResponding = messages?.[messages.length - 1]?.status === "streaming";
+  const [clockTick, setClockTick] = useState(() => Date.now());
+
+  /**
+   * A reply that dies without reporting anything leaves the lock set. The
+   * server clears it on the next send; this releases the composer at the same
+   * moment so the user can make that send in the first place.
+   */
+  useEffect(() => {
+    if (respondingSince === undefined) return;
+
+    const remaining = respondingSince + RESPONSE_TIMEOUT_MS - Date.now();
+
+    if (remaining <= 0) return;
+
+    const timer = setTimeout(() => setClockTick(Date.now()), remaining);
+
+    return () => clearTimeout(timer);
+  }, [respondingSince]);
+
+  const isResponding =
+    respondingSince !== undefined &&
+    clockTick - respondingSince < RESPONSE_TIMEOUT_MS;
 
   const sendMessage = async () => {
     const text = message.trim();
