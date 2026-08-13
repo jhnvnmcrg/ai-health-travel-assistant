@@ -1,4 +1,5 @@
-import { Alert, FlatList, TouchableOpacity } from "react-native";
+import { FlatList, TouchableOpacity } from "react-native";
+import { confirm } from "@/lib/confirm";
 import { useMutation } from "convex/react";
 import { CheckIcon, Trash2Icon } from "lucide-react-native";
 import { api } from "@/convex/_generated/api";
@@ -18,6 +19,27 @@ type ConversationSheetProps = {
   onSelect: (id: Id<"conversations">) => void;
 };
 
+/**
+ * A component, not an element — and that distinction is load-bearing on web.
+ *
+ * `VirtualizedList` clones whatever it is given with
+ * `style: StyleSheet.compose(inversionStyle, element.props.style)`, which
+ * produces an **array**. Handed an element, that array lands straight on this
+ * `Text` and the DOM rejects it: "Failed to set an indexed property [0] on
+ * 'CSSStyleDeclaration'". Handed a component, the array arrives as a prop this
+ * function simply ignores.
+ *
+ * It only ever fires once every conversation has been deleted, which is why it
+ * survived until someone emptied the list.
+ */
+function EmptyConversationList() {
+  return (
+    <Text size="sm" className="text-muted-foreground">
+      No conversations yet.
+    </Text>
+  );
+}
+
 function formatUpdatedAt(updatedAt: number): string {
   return new Date(updatedAt).toLocaleDateString(undefined, {
     month: "short",
@@ -34,25 +56,21 @@ export function ConversationSheet({
 }: ConversationSheetProps) {
   const deleteConversation = useMutation(api.conversations.deleteConversation);
 
-  const confirmDelete = (conversation: Doc<"conversations">) => {
-    Alert.alert(
-      "Delete conversation",
-      `Delete "${conversation.title ?? "this conversation"}"? This can't be undone.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteConversation({ conversationId: conversation._id });
-            } catch (error) {
-              console.error("Failed to delete conversation:", error);
-            }
-          },
-        },
-      ],
-    );
+  const confirmDelete = async (conversation: Doc<"conversations">) => {
+    const confirmed = await confirm({
+      title: "Delete conversation",
+      message: `Delete "${conversation.title ?? "this conversation"}"? This can't be undone.`,
+      confirmLabel: "Delete",
+      destructive: true,
+    });
+
+    if (!confirmed) return;
+
+    try {
+      await deleteConversation({ conversationId: conversation._id });
+    } catch (error) {
+      console.error("Failed to delete conversation:", error);
+    }
   };
 
   return (
@@ -67,11 +85,7 @@ export function ConversationSheet({
         keyExtractor={(item) => item._id}
         showsVerticalScrollIndicator={false}
         ItemSeparatorComponent={() => <Box className="h-px bg-border" />}
-        ListEmptyComponent={
-          <Text size="sm" className="text-muted-foreground">
-            No conversations yet.
-          </Text>
-        }
+        ListEmptyComponent={EmptyConversationList}
         renderItem={({ item }) => {
           const isCurrent = item._id === conversationId;
 

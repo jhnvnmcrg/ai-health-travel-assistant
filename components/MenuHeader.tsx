@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Modal, Pressable, TouchableOpacity } from "react-native";
+import { Pressable, TouchableOpacity } from "react-native";
 import {
   EllipsisVertical,
   HeartPulse,
@@ -8,12 +8,12 @@ import {
   User,
 } from "lucide-react-native";
 import type { LucideIcon } from "lucide-react-native";
-import { UserProfileView } from "@clerk/expo/native";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { Box } from "@/components/ui/box";
 import { HStack } from "@/components/ui/hstack";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
+import { AccountSheet } from "./AccountSheet";
 import { ConversationSheet } from "./ConversationSheet";
 import { HealthProfileSheet } from "./HealthProfileSheet";
 
@@ -133,14 +133,10 @@ export function MenuHeader({
         onClose={() => setIsProfileOpen(false)}
       />
 
-      <Modal
-        animationType="slide"
+      <AccountSheet
         visible={isAccountOpen}
-        presentationStyle="pageSheet"
-        onRequestClose={() => setIsAccountOpen(false)}
-      >
-        <UserProfileView onDismiss={() => setIsAccountOpen(false)} />
-      </Modal>
+        onClose={() => setIsAccountOpen(false)}
+      />
     </>
   );
 }

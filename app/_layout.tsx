@@ -1,5 +1,6 @@
 import { ClerkProvider, useAuth } from "@clerk/expo";
-import { tokenCache } from "@clerk/expo/token-cache";
+// Platform-split: SecureStore on native, nothing on web. See lib/tokenCache.web.ts.
+import { tokenCache } from "../lib/tokenCache";
 import { GluestackUIProvider } from "@/components/ui/gluestack-ui-provider";
 import "@/global.css";
 import { Stack } from "expo-router";

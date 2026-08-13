@@ -1,5 +1,5 @@
 {
-  "name": "ai-health-travel-assistant",
+  "name": "AITravPH",
   "version": "1.0.0",
   "main": "expo-router/entry",
   "scripts": {
@@ -9,7 +9,7 @@
     "web": "expo start --web",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p convex/tsconfig.json",
+    "typecheck": "node --stack-size=16000 node_modules/typescript/lib/tsc.js --noEmit && tsc --noEmit -p convex/tsconfig.json",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

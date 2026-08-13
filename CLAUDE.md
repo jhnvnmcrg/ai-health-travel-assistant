@@ -215,6 +215,20 @@ Do **not** put `accessible={true}` on the assistant `VStack` — it collapses th
 
 [components/ui/gluestack-ui-provider/config.ts](components/ui/gluestack-ui-provider/config.ts) holds a hand-authored v4-style `vars()` palette (`--color-primary-500` etc.) that nothing imports — the live system is `global.css`. Don't style against those names.
 
+### Web
+
+`npx expo export --platform web` builds. Two `.web` variants make that true, and both look like dead code from the native side — deleting either breaks the browser build silently:
+
+- **[lib/tokenCache.web.ts](lib/tokenCache.web.ts)** exports `undefined`. `@clerk/expo/token-cache` calls `expo-secure-store` unconditionally, and SecureStore's web build is a literal `export default {}` — `saveToken` has no `catch`, so every token write became an unhandled rejection. Passing no cache is correct on web: Clerk's JS SDK persists the session in the browser itself.
+- **[components/AccountSheet.web.tsx](components/AccountSheet.web.tsx)** swaps Clerk's native `UserProfileView` for the React `UserProfile` from `@clerk/expo/web`. The native component does **not** throw in a browser — it degrades to an empty `View`, which is worse, because the account sheet opens blank with nothing to explain why.
+
+Two web-only traps that native never reveals:
+
+- **`Alert.alert` is a no-op.** React Native Web ships `class Alert { static alert() {} }`. Anything gated behind a confirmation dialog silently never happens — the delete button worked, no dialog appeared, nothing was deleted, and nothing was logged. Use [lib/confirm.ts](lib/confirm.ts) (`.web.ts` uses `window.confirm`), which resolves to a boolean so the action sits in normal control flow rather than inside a callback that may never fire.
+- **Pass list slots as components, never elements.** `VirtualizedList` clones whatever you give `ListEmptyComponent` with `style: StyleSheet.compose(...)` — an **array**. On an element that array reaches the DOM and throws `Failed to set an indexed property [0] on 'CSSStyleDeclaration'`; on a component it arrives as an ignored prop. It only fires once a list is genuinely empty, so it hides until someone deletes everything.
+
+`npm run typecheck` invokes `tsc` through `node --stack-size=16000` rather than directly. Clerk's type graph is deep enough to exhaust Node's default stack, and `tsc` then dies with `RangeError: Maximum call stack size exceeded` instead of reporting errors — it looks like a crash, not a type failure. 8000 is the floor; 16000 is headroom.
+
 `expo-location` is used by [hooks/useDeviceLocation.ts](hooks/useDeviceLocation.ts), behind the map-pin button in the composer. It stops at a **place name** rather than passing coordinates through: `fetch_location_environment_data` takes a location string, and a name is also what the user needs to see to know the advice is about where they actually are. It fills the composer rather than sending, so the question stays editable.
 
 ## Skills

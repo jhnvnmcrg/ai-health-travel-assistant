@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "ai-health-travel-assistant",
+    "name": "AITravPH",
     "slug": "ai-health-travel-assistant",
-    "scheme": "ai-health-travel-assistant",
+    "scheme": "AITravPH",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
