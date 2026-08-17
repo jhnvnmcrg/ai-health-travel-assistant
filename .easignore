@@ -1,0 +1,76 @@
+# What NOT to upload to EAS Build.
+#
+# IMPORTANT: when this file exists, EAS uses it INSTEAD of .gitignore — not in
+# addition to it. Everything .gitignore excludes has to be repeated here, or
+# node_modules and .env start getting uploaded. Keep the two in sync.
+
+# ---------------------------------------------------------------------------
+# The reason this file exists.
+#
+# `.claude/skills/*` are symlinks into `.agents/skills/*`. EAS copies the
+# project into a temp directory and tries to recreate them, which Windows
+# refuses without admin rights or Developer Mode:
+#
+#   EPERM: operation not permitted, symlink '...\.agents\skills\clerk-backend-api'
+#
+# They are agent tooling and have no place in an app bundle regardless, so
+# excluding them fixes the build and shrinks the upload.
+# ---------------------------------------------------------------------------
+.agents/
+.claude/
+skills-lock.json
+CLAUDE.md
+AGENTS.md
+
+# Dev-only tooling — never imported by the app.
+__tests__/
+vitest.config.ts
+eslint.config.mjs
+.prettierrc
+.prettierignore
+.env.example
+
+# ---------------------------------------------------------------------------
+# Mirrored from .gitignore below this line.
+# ---------------------------------------------------------------------------
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.env
+.env*.local
+
+# typescript
+*.tsbuildinfo
+
+# generated native folders
+/ios
+/android

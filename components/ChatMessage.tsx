@@ -3,14 +3,12 @@ import { Text } from "@/components/ui/text";
 import { VStack } from "@/components/ui/vstack";
 import type { Doc } from "@/convex/_generated/dataModel";
 
-
 type ChatMessageProps = {
   message: Doc<"messages">;
 };
 
 export function ChatMessage({ message }: ChatMessageProps) {
-  const { role, text, status, environmentalMetadata, nearbyHospitals } =
-    message;
+  const { role, text, status } = message;
 
   if (status === "error") {
     return (
