@@ -4,6 +4,7 @@ import { useAuth, useUser } from "@clerk/expo";
 import { useConvexAuth, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { StatusScreen } from "@/components/StatusScreen";
+import { usePushRegistration } from "@/hooks/usePushRegistration";
 
 const SLOW_CONNECT_MS = 6000;
 
@@ -52,6 +53,10 @@ export default function ProtectedLayout() {
     // Primitives only: depending on the Clerk `user` object would re-run this
     // mutation on every identity change.
   }, [isAuthenticated, clerkUserId, email, displayName, syncUser]);
+
+  // Only once the Convex user row exists — registerPushToken needs it, and
+  // this layout is the one place that guarantees it.
+  usePushRegistration(isSynced);
 
   const isConnecting =
     !isLoaded || (isSignedIn && (isAuthLoading || (!isSynced && !syncError)));

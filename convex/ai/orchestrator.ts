@@ -250,6 +250,15 @@ export async function runHealthTravelAssistant(
   conversationId: Id<"conversations">,
   healthConditions: string[],
   onAdvice?: (adviceSoFar: string) => Promise<void>,
+  /**
+   * An instruction appended as a final user turn for this generation only.
+   *
+   * Used by the trip reminder in convex/trips.ts, which has to prompt a reply
+   * when the traveller has not asked anything. It is never written to the
+   * database — inventing a user message they did not send would corrupt the
+   * transcript and be replayed as fact on every later turn.
+   */
+  extraUserTurn?: string,
 ): Promise<AssistantRun> {
   const history = await ctx.runQuery(internal.messages.getConversationContext, {
     conversationId,
@@ -258,6 +267,13 @@ export async function runHealthTravelAssistant(
   const systemInstruction = buildSystemInstruction(healthConditions);
 
   let contents = buildGeminiContents(history);
+
+  if (extraUserTurn) {
+    contents = [
+      ...contents,
+      { role: "user", parts: [{ text: extraUserTurn }] },
+    ];
+  }
   let rounds = 0;
 
   const readings: EnvironmentReading[] = [];
@@ -301,7 +317,7 @@ export async function runHealthTravelAssistant(
       let result: unknown;
 
       try {
-        result = await tool(ctx, args);
+        result = await tool(ctx, args, { conversationId });
       } catch (error) {
         // A failing tool is information for the model, not the end of the
         // turn. The common case is a place the geocoder can't resolve — a

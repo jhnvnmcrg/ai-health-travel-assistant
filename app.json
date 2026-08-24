@@ -50,9 +50,9 @@
             }
           }
         }
-      ]
+      ],
+      "expo-notifications"
     ],
-
     "extra": {
       "router": {},
       "eas": {

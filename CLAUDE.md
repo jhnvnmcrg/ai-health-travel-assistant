@@ -155,6 +155,19 @@ The three persisted fields are rendered by [components/ChatMessage.tsx](componen
 
 `createConversation` reuses the most recent conversation when nothing has been said in it. "New chat" is a button someone can press three times in a row, and each press would otherwise leave an identical empty thread in the switcher.
 
+### Trip reminders
+
+`save_trip` stores a planned trip and `scheduler.runAt` fires `trips.sendTripReminder` at 6pm Philippine time the day before. Four things about it are deliberate:
+
+- **The reminder regenerates the advice; it does not replay it.** The model re-runs its tools, so a trip saved three weeks earlier gets tomorrow's actual forecast — "rain has moved in since we spoke" is the entire value. It reaches the orchestrator through `extraUserTurn`, an instruction appended as a final user turn for that one generation and **never written to the database**: inventing a user message the traveller never sent would corrupt the transcript and be replayed as fact on every later turn.
+- **It takes the reply lock.** `conversations.tryAcquireReplyLock` is the same lock `messages.createMessage` uses. Without it a reminder firing while someone is mid-conversation interleaves two replies in one thread, and whichever finishes first clears the other's lock. If the lock is held the reminder reschedules itself `REMINDER_RETRY_MS` later — comfortably past `RESPONSE_TIMEOUT_MS`, so it cannot loop.
+- **`reminderSentAt` is set before generating.** Convex may retry a scheduled action; without that flag a retry sends a second reminder.
+- **Dates are validated, not trusted.** [lib/tripSchedule.ts](lib/tripSchedule.ts) is pure and covered by 14 tests, because this is where the feature would break silently. `2026-02-30` and `2026-09-31` both round-trip through `Date.UTC` to something else, so the parts are compared back to catch the overflow.
+
+**Timezone is the whole difficulty.** A trip date is a Philippine calendar day, not an instant: `2026-09-11` in Manila begins at `2026-09-10T16:00Z`, so day-before arithmetic done in UTC lands the reminder on the wrong day for anything scheduled in the evening. `PH_UTC_OFFSET_HOURS` is a fixed 8 because the Philippines has no daylight saving. `buildSystemInstruction` now always appends today's Philippine date — without it the model cannot resolve "11 September" or "next Friday" at all, and `save_trip` rejects a guess.
+
+Delivery is both in-app and push. The reminder is written into the conversation first, then [convex/push.ts](convex/push.ts) sends an Expo notification if a token exists. Push is **best-effort by design** and never throws: a declined permission, web, or an Expo outage costs the notification and nothing else, because the reminder has already landed where the user will see it. A `DeviceNotRegistered` ticket clears the stored token so we stop pushing at an uninstalled app forever. [hooks/usePushRegistration.ts](hooks/usePushRegistration.ts) registers the token and has a `.web.ts` no-op — Expo push tokens are native-only, and browsers would need Web Push with a service worker and VAPID keys.
+
 ### The health profile
 
 `users.healthConditions` is appended to the system instruction on **every** turn by `buildSystemInstruction` in [convex/ai/systemPrompt.ts](convex/ai/systemPrompt.ts), not replayed as a message. The conversation window is finite, so "I have asthma" said once would otherwise scroll out and stop informing the advice — in an app whose prompt opens by telling the model to weigh the user's health conditions. Edited from [components/HealthProfileSheet.tsx](components/HealthProfileSheet.tsx).

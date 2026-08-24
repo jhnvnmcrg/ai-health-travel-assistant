@@ -102,6 +102,30 @@ export const updateHealthConditions = mutation({
 });
 
 /**
+ * Stores the Expo push token for trip reminders.
+ *
+ * Idempotent and called on every app start, because a token can be rotated
+ * by the OS at any time. The write is skipped when nothing changed so this
+ * does not touch the user row on every launch.
+ */
+export const registerPushToken = mutation({
+  args: {
+    pushToken: v.string(),
+  },
+
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const pushToken = args.pushToken.trim();
+
+    if (!pushToken || user.pushToken === pushToken) {
+      return;
+    }
+
+    await ctx.db.patch(user._id, { pushToken, updatedAt: Date.now() });
+  },
+});
+
+/**
  * Internal: convex/chat.ts runs scheduled, with no caller identity, so it
  * looks the profile up by the conversation's owner.
  */

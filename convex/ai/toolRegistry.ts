@@ -1,9 +1,22 @@
 import { ActionCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
+import type { Id } from "../_generated/dataModel";
+
+/**
+ * What a tool knows about the turn it is running in, beyond its own arguments.
+ *
+ * `save_trip` needs the conversation so the reminder it schedules knows where
+ * to write itself back to. Passed separately from `args` because it comes from
+ * the server, never from the model.
+ */
+export type ToolContext = {
+  conversationId: Id<"conversations">;
+};
 
 export type ToolExecutor = (
   ctx: ActionCtx,
   args: Record<string, unknown>,
+  toolContext: ToolContext,
 ) => Promise<unknown>;
 
 export const toolRegistry: Record<string, ToolExecutor> = {
@@ -18,6 +31,13 @@ export const toolRegistry: Record<string, ToolExecutor> = {
     );
   },
 
+  async search_nearby_hospitals(ctx, args) {
+    return await ctx.runAction(internal.hospital.searchNearbyHospitals, {
+      latitude: args.latitude as number,
+      longitude: args.longitude as number,
+    });
+  },
+
   async find_safe_places(ctx, args) {
     return await ctx.runAction(internal.safePlaces.findSafePlaces, {
       latitude: args.latitude as number,
@@ -25,10 +45,11 @@ export const toolRegistry: Record<string, ToolExecutor> = {
     });
   },
 
-  async search_nearby_hospitals(ctx, args) {
-    return await ctx.runAction(internal.hospital.searchNearbyHospitals, {
-      latitude: args.latitude as number,
-      longitude: args.longitude as number,
+  async save_trip(ctx, args, { conversationId }) {
+    return await ctx.runMutation(internal.trips.saveTrip, {
+      conversationId,
+      destination: args.destination as string,
+      tripDate: args.tripDate as string,
     });
   },
 };

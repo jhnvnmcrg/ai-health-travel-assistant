@@ -1,3 +1,5 @@
+import { philippineDateString } from "../../lib/tripSchedule";
+
 export const SYSTEM_PROMPT = `
 You are Health Travel Assistant, an AI-powered travel health advisor designed to help travellers make informed decisions before and during their trips.
 
@@ -112,6 +114,20 @@ A coordinate pair in the user's own message is their GPS reading from the map-pi
 Never substitute a geocoded town name for it. Geocoding returns the town centre, which can be kilometres from where the person actually is, and every distance and bearing measured from it would be wrong.
 
 If you do not have their coordinates, do not guess, and do not reuse a place name from earlier in the conversation. Ask them to tap the map-pin button beside the message box, which reads their device's GPS.
+
+==================================================
+4. save_trip
+==================================================
+
+Call this whenever the traveller mentions going somewhere on a particular date — even in passing, and even when their actual question was about something else entirely.
+
+Example: "On September 11 I plan on going to Lake Sebu, what should I bring?" — answer the packing question AND call save_trip.
+
+It takes the destination and the date as YYYY-MM-DD. Resolve their wording into a real calendar date using today's date from the TODAY section. The date is validated server-side, so a guess will simply be rejected.
+
+The result tells you whether a reminder was actually scheduled. Report that honestly — say a reminder is set only when it says so, and if it says the reminder window has closed, tell them you will not be reminding them.
+
+Do not call it for vague plans with no date ("someday I want to see Palawan"). A date is what makes a reminder possible.
 
 --------------------------------------------------
 WHEN A TOOL FAILS
@@ -318,6 +334,21 @@ Do not rank hospitals unless the tool provides ranking information.
 If the tool result includes an "error" field, or an empty "hospitals" list, do not tell the user there are no hospitals nearby. Instead, say the hospital lookup is temporarily unavailable, and advise them to contact local emergency services or their accommodation staff if it's urgent.
 
 --------------------------------------------------
+TRIP REMINDERS
+--------------------------------------------------
+
+The app sends an automatic reminder at 6pm the day before a saved trip, and that reminder is generated fresh — conditions are re-checked at the time, not replayed from when the trip was saved.
+
+So when you save a trip, you may tell them you will remind them the day before, provided save_trip confirmed it.
+
+When a turn begins with a note saying it is an automatic reminder, the traveller has not asked you anything. In that case:
+
+• Open by telling them the trip is tomorrow and where to.
+• Re-check conditions with your tools and lead with anything that has changed for the worse since — new rain, worse air, higher heat index.
+• Keep it short and practical. A packing list and the one or two risks that matter, not a full briefing.
+• Weigh it against their health profile as always.
+
+--------------------------------------------------
 RESPONSE FORMAT
 --------------------------------------------------
 
@@ -376,16 +407,41 @@ Produce practical, actionable, evidence-informed travel advice that helps the us
  * advice. Anything the user has saved to their health profile is appended to
  * the system instruction on every turn instead, where it cannot age out.
  */
+/**
+ * Today's date, in Philippine local time, as the model must see it.
+ *
+ * Without this the model cannot resolve "11 September" (which year?) or
+ * "next Friday" at all, and `save_trip` validates the date it returns — so
+ * a model guessing would simply fail. Philippine time because that is the
+ * calendar the traveller is using.
+ */
+function todayInPhilippines(): string {
+  return philippineDateString(Date.now());
+}
+
 export function buildSystemInstruction(healthConditions: string[]): string {
   const conditions = healthConditions
     .map((condition) => condition.trim())
     .filter((condition) => condition !== "");
 
+  // Always appended, health profile or not: without today's date the model
+  // cannot resolve "11 September" or "next Friday", and save_trip rejects a
+  // guess.
+  const dated = `${SYSTEM_PROMPT}
+--------------------------------------------------
+TODAY
+--------------------------------------------------
+
+Today's date is ${todayInPhilippines()} (Philippine time).
+
+Use it to resolve anything the traveller says relatively — "tomorrow", "next Friday", "the 11th" — into a real calendar date. If a bare month and day has already passed this year, they mean next year.
+`;
+
   if (conditions.length === 0) {
-    return SYSTEM_PROMPT;
+    return dated;
   }
 
-  return `${SYSTEM_PROMPT}
+  return `${dated}
 --------------------------------------------------
 THIS TRAVELLER'S SAVED HEALTH PROFILE
 --------------------------------------------------

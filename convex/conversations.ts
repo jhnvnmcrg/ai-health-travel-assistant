@@ -7,6 +7,7 @@ import {
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { getAuthedUser, requireConversation, requireUser } from "./lib/auth";
+import { RESPONSE_TIMEOUT_MS } from "../lib/chatLimits";
 
 /** How many conversations the switcher lists. */
 const CONVERSATION_LIST_LIMIT = 50;
@@ -59,6 +60,43 @@ export const getById = internalQuery({
 
   handler: async (ctx, args) => {
     return await ctx.db.get(args.conversationId);
+  },
+});
+
+/**
+ * Takes the conversation's reply lock if it is free, in one transaction.
+ *
+ * `messages.createMessage` takes the lock for a user-initiated turn. The
+ * trip reminder in convex/trips.ts is the other way a reply can start, and
+ * it needs the same guarantee: two generations writing into one thread
+ * interleave their bubbles, and whichever finishes first clears the other's
+ * lock. A stale lock is ignored on the same `RESPONSE_TIMEOUT_MS` deadline
+ * used everywhere else.
+ */
+export const tryAcquireReplyLock = internalMutation({
+  args: {
+    conversationId: v.id("conversations"),
+  },
+
+  handler: async (ctx, args): Promise<boolean> => {
+    const conversation = await ctx.db.get(args.conversationId);
+
+    if (!conversation) {
+      return false;
+    }
+
+    const now = Date.now();
+
+    if (
+      conversation.respondingSince !== undefined &&
+      now - conversation.respondingSince < RESPONSE_TIMEOUT_MS
+    ) {
+      return false;
+    }
+
+    await ctx.db.patch(args.conversationId, { respondingSince: now });
+
+    return true;
   },
 });
 

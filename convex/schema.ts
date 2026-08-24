@@ -96,6 +96,14 @@ export default defineSchema({
      */
     healthConditions: v.optional(v.array(v.string())),
 
+    /**
+     * Expo push token for trip reminders, registered by
+     * hooks/usePushRegistration.ts. Absent on web and whenever the user has
+     * declined notifications — convex/trips.ts treats that as in-app only
+     * rather than an error.
+     */
+    pushToken: v.optional(v.string()),
+
     createdAt: v.number(),
     updatedAt: v.number(),
     // Only `by_clerkUserId` — identity always arrives as a Clerk subject, so
@@ -136,6 +144,28 @@ export default defineSchema({
 
     createdAt: v.number(),
   }).index("by_conversation", ["conversationId"]),
+
+  /**
+   * A planned trip, so the assistant can remind the traveller the day before.
+   *
+   * `tripDate` is a Philippine calendar date (`YYYY-MM-DD`), not a timestamp:
+   * "11 September" is a day in Manila, and storing an instant would make the
+   * reminder land on the wrong side of midnight. See lib/tripSchedule.ts.
+   */
+  trips: defineTable({
+    userId: v.id("users"),
+    /** Where the reminder gets written back to. */
+    conversationId: v.id("conversations"),
+    destination: v.string(),
+    tripDate: v.string(),
+
+    /** Absent when the trip was saved too late for a reminder to be useful. */
+    remindAt: v.optional(v.number()),
+    /** Set once the reminder has gone out, so a retry cannot double-send. */
+    reminderSentAt: v.optional(v.number()),
+
+    createdAt: v.number(),
+  }).index("by_user_date", ["userId", "tripDate"]),
 
   /**
    * Nominatim asks callers to stay under ~1 request/second and to cache what

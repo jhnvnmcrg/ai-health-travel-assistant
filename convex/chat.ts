@@ -4,33 +4,10 @@ import { internal } from "./_generated/api";
 
 import { runHealthTravelAssistant } from "./ai/orchestrator";
 import { generateConversationTitle } from "./ai/generateConversationTitle";
-import type { EnvironmentReading } from "./services/environmentService";
-import type { SafetyVerdict } from "./ai/types";
+import { buildEnvironmentalMetadata } from "./lib/messagePayload";
 
 const FAILURE_TEXT =
   "Sorry — I couldn't put together travel health advice just now. Please send your message again in a moment.";
-
-/**
- * The stored metadata is the tool's own reading plus the verdict the model
- * reached about it. `locationName` is dropped when the geocoder gave nothing
- * usable rather than stored empty.
- */
-function buildEnvironmentalMetadata(
-  environment: EnvironmentReading | undefined,
-  safetyVerdict: SafetyVerdict,
-) {
-  if (!environment) {
-    return undefined;
-  }
-
-  const { locationName, ...reading } = environment;
-
-  return {
-    ...reading,
-    ...(locationName ? { locationName } : {}),
-    safetyVerdict,
-  };
-}
 
 /**
  * Names a new conversation from its opening message.
