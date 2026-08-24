@@ -106,6 +106,7 @@ Declared as Gemini `FunctionDeclaration`s in [convex/ai/tools.ts](convex/ai/tool
 
 - `fetch_location_environment_data` → `internal.environment.fetchLocationEnvironmentData`: Nominatim geocode (the query appends `, Philippines`), then Open-Meteo forecast, air-quality and elevation in parallel ([convex/services/environmentService.ts](convex/services/environmentService.ts)). Heat index is computed locally by [convex/utils/heatIndex.ts](convex/utils/heatIndex.ts) (NWS Rothfusz regression).
 - `search_nearby_hospitals` → [convex/hospital.ts](convex/hospital.ts): Overpass API, 10km radius, three mirror endpoints tried in order, 15s abort timeout. On total failure it returns `{ hospitals: [], error }` instead of throwing — the system prompt instructs the model to report "lookup temporarily unavailable" rather than "no hospitals nearby".
+- `find_safe_places` → [convex/safePlaces.ts](convex/safePlaces.ts): Overpass again, but a **15km** radius and four categories (town/village, police, hospital, bus station). Wider than the hospital radius because someone lost off a trail may have no settlement inside 10km at all, and "nothing found" is a worse answer than "the nearest town is 14km northeast". Unnamed places are dropped — you cannot ask a stranger the way to an unnamed village. Same graceful-failure contract as the hospital tool.
 
 **A failing tool does not fail the turn.** [convex/ai/orchestrator.ts](convex/ai/orchestrator.ts) catches whatever a tool throws and feeds it back to the model as `{ error }`, so the model can respond to it. Letting it propagate meant a mistyped place name — "Bagiuo" — surfaced as "Sorry, please send your message again", which hid the real problem and advised the one thing guaranteed to fail identically. The messages thrown by [environmentService.ts](convex/services/environmentService.ts) are written to be read by the model for this reason: `Location not found: Bagiuo` carries enough for it to suggest the spelling. The `WHEN A TOOL FAILS` block in the prompt tells it how to distinguish a bad place name from a downed feed, and `MAX_TOOL_ROUNDS` still bounds any retry loop that follows.
 
@@ -115,6 +116,19 @@ Two things in the environment tool exist for reasons that are not obvious from t
 - **Weather is required, air quality and elevation are not.** If either enrichment feed is down the advice is still worth giving with fewer metrics beside it. Temperature and humidity are different — they drive the heat index, which is the headline risk in this climate.
 
 Every measurement is optional all the way through (`Conditions`, the schema validator, `EnvironmentSummary`). The feeds genuinely return null for some coordinates, and the previous `?? 0` turned "we don't know" into `pm25: 0`, which renders as pristine air.
+
+### Getting a lost traveller home
+
+`find_safe_places` returns **destinations, never a route**, and there is deliberately no tool that returns one. The `LOST OR DISORIENTED` block in [systemPrompt.ts](convex/ai/systemPrompt.ts) forbids the model from describing a path at all — no "follow the river downstream", no "take the trail on your left". It cannot see terrain, trails, cliffs or roads, and a confident wrong direction given to someone lost at dusk is far more dangerous than no direction. That block also puts two things ahead of the map: call 911 if this is an emergency, and consider whether **staying put** is safer than walking, which is standard guidance in unfamiliar terrain and the opposite of what a "which way do I go" question invites.
+
+[components/SafePlaces.tsx](components/SafePlaces.tsx) renders the result as tappable rows and hands the actual navigation to Google Maps via a universal `maps/dir/?api=1` URL — one link that the Maps app handles on Android and iOS and the browser handles on web, so no platform split.
+
+Two details in that card are deliberate:
+
+- **`origin` is omitted from the Maps URL.** Google then routes from the device's own live position, which beats anything stored when the reply was written — someone lost has probably kept moving. The stored `safePlaces.origin` is used only to compute the distance and bearing shown in the card.
+- **`safePlaces` stores its own origin**, unlike `nearbyHospitals`, which measures from `environmentalMetadata` and shows no distances without it. Somebody lost may never have named a place to geocode, so this card has to be self-contained.
+
+Distance and compass bearing come from `distanceInKm` / `bearingInDegrees` / `compassDirection` in [lib/geo.ts](lib/geo.ts) — never from the model. `compassDirection` is eight-point on purpose: "northeast" is actionable without a compass, "north-northeast" is false precision for someone reading a phone screen.
 
 ### The response contract
 

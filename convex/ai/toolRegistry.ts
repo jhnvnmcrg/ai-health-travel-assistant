@@ -16,6 +16,13 @@ export const toolRegistry: Record<string, ToolExecutor> = {
     );
   },
 
+  async find_safe_places(ctx, args) {
+    return await ctx.runAction(internal.safePlaces.findSafePlaces, {
+      latitude: args.latitude as number,
+      longitude: args.longitude as number,
+    });
+  },
+
   async search_nearby_hospitals(ctx, args) {
     return await ctx.runAction(internal.hospital.searchNearbyHospitals, {
       latitude: args.latitude as number,

@@ -2,13 +2,14 @@ import { Box } from "@/components/ui/box";
 import { Text } from "@/components/ui/text";
 import { VStack } from "@/components/ui/vstack";
 import type { Doc } from "@/convex/_generated/dataModel";
+import { SafePlaces } from "./SafePlaces";
 
 type ChatMessageProps = {
   message: Doc<"messages">;
 };
 
 export function ChatMessage({ message }: ChatMessageProps) {
-  const { role, text, status } = message;
+  const { role, text, status, safePlaces } = message;
 
   if (status === "error") {
     return (
@@ -69,6 +70,10 @@ export function ChatMessage({ message }: ChatMessageProps) {
         >
           {text}
         </Text>
+
+        {safePlaces && safePlaces.places.length > 0 && (
+          <SafePlaces safePlaces={safePlaces} />
+        )}
       </VStack>
     </Box>
   );

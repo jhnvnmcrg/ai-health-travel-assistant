@@ -16,6 +16,7 @@ import { toolRegistry } from "./toolRegistry";
 const MAX_TOOL_ROUNDS = 4;
 const ENVIRONMENT_TOOL = "fetch_location_environment_data";
 const HOSPITAL_TOOL = "search_nearby_hospitals";
+const SAFE_PLACES_TOOL = "find_safe_places";
 
 /**
  * ~2km. This compares one tool's output against another tool's arguments, so
@@ -34,6 +35,18 @@ type HospitalSearch = {
   hospitals: Hospital[];
 };
 
+export type SafePlace = {
+  name: string;
+  category: "town" | "police" | "hospital" | "transport";
+  latitude: number;
+  longitude: number;
+};
+
+export type SafePlacesResult = {
+  origin: Coordinates;
+  places: SafePlace[];
+};
+
 export type AssistantRun = {
   response: AIResponse;
   /**
@@ -42,6 +55,12 @@ export type AssistantRun = {
    */
   environment?: EnvironmentReading;
   hospitals?: Hospital[];
+  /**
+   * Destinations for a lost traveller, with the coordinate they were searched
+   * from. Self-contained on purpose: someone lost has no place name to
+   * geocode, so this cannot lean on `environment` for its origin.
+   */
+  safePlaces?: SafePlacesResult;
 };
 
 function readNumber(value: unknown): number | undefined {
@@ -115,6 +134,70 @@ function readHospitals(result: unknown): Hospital[] {
   });
 }
 
+const SAFE_PLACE_CATEGORIES = ["town", "police", "hospital", "transport"];
+
+function readSafePlaces(
+  result: unknown,
+  args: Record<string, unknown>,
+): SafePlacesResult | null {
+  const latitude = readNumber(args.latitude);
+  const longitude = readNumber(args.longitude);
+
+  if (latitude === undefined || longitude === undefined) {
+    return null;
+  }
+
+  const list = (result as { places?: unknown } | null)?.places;
+
+  if (!Array.isArray(list)) {
+    return null;
+  }
+
+  const places = list.flatMap((entry): SafePlace[] => {
+    if (!entry || typeof entry !== "object") return [];
+
+    const record = entry as Record<string, unknown>;
+    const placeLat = readNumber(record.latitude);
+    const placeLon = readNumber(record.longitude);
+    const name = typeof record.name === "string" ? record.name.trim() : "";
+    const category = record.category;
+
+    if (
+      placeLat === undefined ||
+      placeLon === undefined ||
+      name === "" ||
+      typeof category !== "string" ||
+      !SAFE_PLACE_CATEGORIES.includes(category)
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        name,
+        category: category as SafePlace["category"],
+        latitude: placeLat,
+        longitude: placeLon,
+      },
+    ];
+  });
+
+  return { origin: { latitude, longitude }, places };
+}
+
+/**
+ * One card, so one search. Two `find_safe_places` calls in a turn would mean
+ * two different origins, and a card that measures distances from the wrong one
+ * is worse than no card for somebody trying to walk to safety.
+ */
+function pickSafePlaces(
+  searches: SafePlacesResult[],
+): SafePlacesResult | undefined {
+  if (searches.length !== 1) return undefined;
+
+  return searches[0].places.length > 0 ? searches[0] : undefined;
+}
+
 /**
  * A reply carries one metric strip, so it can only be labelled when the turn
  * resolved exactly one place. Asking about two destinations at once used to
@@ -179,6 +262,7 @@ export async function runHealthTravelAssistant(
 
   const readings: EnvironmentReading[] = [];
   const searches: HospitalSearch[] = [];
+  const safePlaceSearches: SafePlacesResult[] = [];
 
   while (true) {
     const turn = await generateChatTurn(contents, systemInstruction, onAdvice);
@@ -190,6 +274,7 @@ export async function runHealthTravelAssistant(
         response: parseAIResponse(turn.text),
         environment,
         hospitals: pickHospitals(searches, environment),
+        safePlaces: pickSafePlaces(safePlaceSearches),
       };
     }
 
@@ -249,6 +334,12 @@ export async function runHealthTravelAssistant(
 
         if (reading) {
           readings.push(reading);
+        }
+      } else if (toolName === SAFE_PLACES_TOOL) {
+        const found = readSafePlaces(result, args);
+
+        if (found) {
+          safePlaceSearches.push(found);
         }
       } else if (toolName === HOSPITAL_TOOL) {
         const latitude = readNumber(args.latitude);

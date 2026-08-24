@@ -46,6 +46,36 @@ export const nearbyHospitalsValidator = v.array(
   }),
 );
 
+/**
+ * Somewhere a lost traveller can head for, found in OpenStreetMap by
+ * convex/safePlaces.ts.
+ *
+ * `origin` is stored alongside the places so the card can work out distance
+ * and bearing itself. `nearbyHospitals` measures from
+ * `environmentalMetadata` and so shows no distances without it; this one is
+ * self-contained, which matters because someone lost may never have mentioned
+ * a place name to geocode in the first place.
+ */
+export const safePlacesValidator = v.object({
+  origin: v.object({
+    latitude: v.number(),
+    longitude: v.number(),
+  }),
+  places: v.array(
+    v.object({
+      name: v.string(),
+      category: v.union(
+        v.literal("town"),
+        v.literal("police"),
+        v.literal("hospital"),
+        v.literal("transport"),
+      ),
+      latitude: v.number(),
+      longitude: v.number(),
+    }),
+  ),
+});
+
 export const messageStatusValidator = v.union(
   v.literal("sending"),
   v.literal("streaming"),
@@ -102,6 +132,7 @@ export default defineSchema({
     status: v.optional(messageStatusValidator),
     environmentalMetadata: v.optional(environmentalMetadataValidator),
     nearbyHospitals: v.optional(nearbyHospitalsValidator),
+    safePlaces: v.optional(safePlacesValidator),
 
     createdAt: v.number(),
   }).index("by_conversation", ["conversationId"]),

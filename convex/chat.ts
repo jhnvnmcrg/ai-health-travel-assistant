@@ -119,6 +119,7 @@ export const processUserMessage = internalAction({
           run.response.safetyVerdict,
         ),
         nearbyHospitals: run.hospitals,
+        safePlaces: run.safePlaces,
       });
     } catch (error) {
       // A failing tool (geocode miss, Open-Meteo outage) or an exhausted Gemini

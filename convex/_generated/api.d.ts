@@ -15,6 +15,7 @@ import type * as ai_generateConversationTitle from "../ai/generateConversationTi
 import type * as ai_hospitalTool from "../ai/hospitalTool.js";
 import type * as ai_orchestrator from "../ai/orchestrator.js";
 import type * as ai_parseResponse from "../ai/parseResponse.js";
+import type * as ai_safePlacesTool from "../ai/safePlacesTool.js";
 import type * as ai_systemPrompt from "../ai/systemPrompt.js";
 import type * as ai_toolRegistry from "../ai/toolRegistry.js";
 import type * as ai_tools from "../ai/tools.js";
@@ -25,6 +26,7 @@ import type * as environment from "../environment.js";
 import type * as hospital from "../hospital.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as messages from "../messages.js";
+import type * as safePlaces from "../safePlaces.js";
 import type * as services_environmentService from "../services/environmentService.js";
 import type * as users from "../users.js";
 import type * as utils_heatIndex from "../utils/heatIndex.js";
@@ -43,6 +45,7 @@ declare const fullApi: ApiFromModules<{
   "ai/hospitalTool": typeof ai_hospitalTool;
   "ai/orchestrator": typeof ai_orchestrator;
   "ai/parseResponse": typeof ai_parseResponse;
+  "ai/safePlacesTool": typeof ai_safePlacesTool;
   "ai/systemPrompt": typeof ai_systemPrompt;
   "ai/toolRegistry": typeof ai_toolRegistry;
   "ai/tools": typeof ai_tools;
@@ -53,6 +56,7 @@ declare const fullApi: ApiFromModules<{
   hospital: typeof hospital;
   "lib/auth": typeof lib_auth;
   messages: typeof messages;
+  safePlaces: typeof safePlaces;
   "services/environmentService": typeof services_environmentService;
   users: typeof users;
   "utils/heatIndex": typeof utils_heatIndex;

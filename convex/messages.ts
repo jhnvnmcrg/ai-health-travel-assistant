@@ -11,6 +11,7 @@ import { components, internal } from "./_generated/api";
 import {
   environmentalMetadataValidator,
   nearbyHospitalsValidator,
+  safePlacesValidator,
 } from "./schema";
 import type { Doc, Id } from "./_generated/dataModel";
 import { getOwnedConversation, requireConversation } from "./lib/auth";
@@ -214,6 +215,7 @@ export const finishStreamingMessage = internalMutation({
     text: v.string(),
     environmentalMetadata: v.optional(environmentalMetadataValidator),
     nearbyHospitals: v.optional(nearbyHospitalsValidator),
+    safePlaces: v.optional(safePlacesValidator),
   },
 
   handler: async (ctx, args) => {
@@ -230,6 +232,7 @@ export const finishStreamingMessage = internalMutation({
       status: "complete",
       environmentalMetadata: args.environmentalMetadata,
       nearbyHospitals: args.nearbyHospitals,
+      safePlaces: args.safePlaces,
     });
 
     await ctx.db.patch(message.conversationId, {

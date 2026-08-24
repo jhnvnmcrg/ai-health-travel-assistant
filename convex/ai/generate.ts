@@ -7,6 +7,7 @@ import {
 import { gemini } from "./client";
 import { environmentTool } from "./tools";
 import { hospitalTool } from "./hospitalTool";
+import { safePlacesTool } from "./safePlacesTool";
 import { readVerdictHeader, stripLeadingFence } from "./parseResponse";
 
 export const CHAT_MODEL = "gemini-3.5-flash-lite";
@@ -93,7 +94,11 @@ export async function generateChatTurn(
           systemInstruction,
           tools: [
             {
-              functionDeclarations: [environmentTool, hospitalTool],
+              functionDeclarations: [
+                environmentTool,
+                hospitalTool,
+                safePlacesTool,
+              ],
             },
           ],
         },
