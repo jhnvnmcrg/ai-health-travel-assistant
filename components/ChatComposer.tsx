@@ -21,18 +21,36 @@ export function ChatComposer({
   onSend,
   isSending = false,
 }: ChatComposerProps) {
-  const { resolvePlaceName, isLocating, error } = useDeviceLocation();
+  const { resolveLocation, isLocating, error } = useDeviceLocation();
 
   /**
    * Fills the composer rather than sending, so the question stays editable —
-   * "how are conditions" is rarely the whole of what someone wants to ask.
+   * "how are conditions" is rarely the whole of what someone wants to ask,
+   * and someone lost will want to change it to "which way back".
+   *
+   * The coordinates go into the message text on purpose. `find_safe_places`
+   * needs them and has no other source, and putting them in plain sight means
+   * the user can see exactly what they are about to share — and delete it if
+   * they would rather not.
    */
   const useMyLocation = async () => {
-    const place = await resolvePlaceName();
+    const location = await resolveLocation();
 
-    if (place) {
-      onChangeText(`I'm in ${place} right now — how are conditions for me?`);
-    }
+    if (!location) return;
+
+    // Five decimal places is a little over a metre. More is noise.
+    const coordinates = `${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}`;
+    const near = location.placeName ? ` (near ${location.placeName})` : "";
+
+    // Only mentioned when it is bad enough to matter to the answer.
+    const accuracy =
+      location.accuracyMetres !== undefined && location.accuracyMetres > 100
+        ? `, accurate to about ${Math.round(location.accuracyMetres)}m`
+        : "";
+
+    onChangeText(
+      `I'm at ${coordinates}${near}${accuracy}. How are conditions here, and what's nearby?`,
+    );
   };
 
   return (

@@ -1,20 +1,35 @@
 import { useCallback, useState } from "react";
 import * as Location from "expo-location";
 
+export type DeviceLocation = {
+  latitude: number;
+  longitude: number;
+  /** Radius of confidence in metres, when the platform reports one. */
+  accuracyMetres?: number;
+  /**
+   * Best-effort only. Reverse geocoding is unsupported on web and returns
+   * nothing across much of rural Philippines — which is precisely where
+   * someone is likely to be lost.
+   */
+  placeName?: string;
+};
+
 /**
- * Turns the device's position into a place name the assistant can look up.
+ * Reads the device's position for the composer's map-pin button.
  *
- * It deliberately stops at a name rather than passing coordinates through:
- * `fetch_location_environment_data` takes a place string, and a name is also
- * what the user needs to see to know the advice is about where they actually
- * are.
+ * **Coordinates are the product here, and the place name is a bonus.** It used
+ * to be the other way round: this hook resolved a name and threw the
+ * coordinates away, because the only tool at the time took a location string.
+ * `find_safe_places` needs real latitude/longitude, and nothing else in the
+ * app can supply them — geocoding a town name yields the town centre, which
+ * for someone lost 5km outside it makes every distance and bearing wrong.
  */
 export function useDeviceLocation() {
   const [isLocating, setIsLocating] = useState(false);
   const [error, setError] = useState<string>();
 
-  const resolvePlaceName = useCallback(async (): Promise<
-    string | undefined
+  const resolveLocation = useCallback(async (): Promise<
+    DeviceLocation | undefined
   > => {
     setError(undefined);
     setIsLocating(true);
@@ -24,36 +39,51 @@ export function useDeviceLocation() {
 
       if (status !== "granted") {
         setError(
-          "Location access is off. Type a place name instead, or enable it in Settings.",
+          "Location access is off. Type where you are instead, or enable it in Settings.",
         );
         return undefined;
       }
 
+      // High, not Balanced. Balanced is ~100m, and this figure is the origin
+      // every safe-place distance and compass bearing is measured from. The
+      // extra second and battery is worth it for an explicit button press.
       const position = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
+        accuracy: Location.Accuracy.High,
       });
 
-      const [place] = await Location.reverseGeocodeAsync({
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-      });
+      const { latitude, longitude, accuracy } = position.coords;
 
-      const name = place?.city ?? place?.subregion ?? place?.region;
+      // Its own try/catch on purpose: this is the part most likely to fail,
+      // and losing the name must never lose the coordinates.
+      let placeName: string | undefined;
 
-      if (!name) {
-        setError("Couldn't work out which place you're in. Try typing it.");
-        return undefined;
+      try {
+        const [place] = await Location.reverseGeocodeAsync({
+          latitude,
+          longitude,
+        });
+
+        placeName =
+          place?.city ?? place?.subregion ?? place?.region ?? undefined;
+      } catch (err) {
+        console.warn("Reverse geocoding unavailable here:", err);
       }
 
-      return name;
+      return {
+        latitude,
+        longitude,
+        accuracyMetres:
+          typeof accuracy === "number" && accuracy > 0 ? accuracy : undefined,
+        placeName: placeName?.trim() || undefined,
+      };
     } catch (err) {
       console.error("Failed to read device location:", err);
-      setError("Couldn't read your location. Try typing a place name.");
+      setError("Couldn't read your location. Try typing where you are.");
       return undefined;
     } finally {
       setIsLocating(false);
     }
   }, []);
 
-  return { resolvePlaceName, isLocating, error };
+  return { resolveLocation, isLocating, error };
 }

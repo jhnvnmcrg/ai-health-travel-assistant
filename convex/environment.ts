@@ -8,6 +8,7 @@ import { internal } from "./_generated/api";
 import {
   fetchConditions,
   geocodeLocation,
+  reverseGeocode,
   type EnvironmentReading,
   type GeocodeResult,
 } from "./services/environmentService";
@@ -17,6 +18,20 @@ const GEOCODE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 function normalizeQuery(location: string): string {
   return location.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/**
+ * Cache key for a reverse lookup, rounded to ~110m.
+ *
+ * The rounding is what makes the cache work at all: raw GPS readings never
+ * repeat, so an exact key would miss every single time and hit Nominatim on
+ * every request. Place names do not change across 110m, so nothing is lost.
+ *
+ * Prefixed so it can never collide with a forward lookup for somewhere that
+ * happens to be named like a coordinate pair.
+ */
+function reverseQueryKey(latitude: number, longitude: number): string {
+  return `reverse:${latitude.toFixed(3)},${longitude.toFixed(3)}`;
 }
 
 type CachedGeocode = GeocodeResult & { fetchedAt: number };
@@ -90,12 +105,32 @@ export const writeGeocodeCache = internalMutation({
  * a free geocoding/weather proxy.
  */
 export const fetchLocationEnvironmentData = internalAction({
+  /**
+   * Either a place name or a coordinate pair. Coordinates win when both are
+   * given: they are where the person actually is, whereas a name resolves to
+   * the centre of a town they may be kilometres outside.
+   */
   args: {
-    location: v.string(),
+    location: v.optional(v.string()),
+    latitude: v.optional(v.number()),
+    longitude: v.optional(v.number()),
   },
 
-  handler: async (ctx, { location }): Promise<EnvironmentReading> => {
-    const query = normalizeQuery(location);
+  handler: async (
+    ctx,
+    { location, latitude, longitude },
+  ): Promise<EnvironmentReading> => {
+    const hasCoordinates = latitude !== undefined && longitude !== undefined;
+
+    if (!hasCoordinates && !location) {
+      throw new Error(
+        "Give me either a place name or a latitude and longitude.",
+      );
+    }
+
+    const query = hasCoordinates
+      ? reverseQueryKey(latitude, longitude)
+      : normalizeQuery(location!);
 
     const cached: CachedGeocode | null = await ctx.runQuery(
       internal.environment.readGeocodeCache,
@@ -105,13 +140,40 @@ export const fetchLocationEnvironmentData = internalAction({
     let place: GeocodeResult | null =
       cached && Date.now() - cached.fetchedAt <= GEOCODE_TTL_MS ? cached : null;
 
-    if (!place) {
-      place = await geocodeLocation(location);
+    // A cached reverse entry stores the rounded coordinates it was keyed on.
+    // Conditions must still be fetched for the exact position given.
+    if (place && hasCoordinates) {
+      place = { ...place, latitude, longitude };
+    }
 
-      await ctx.runMutation(internal.environment.writeGeocodeCache, {
-        query,
-        ...place,
-      });
+    if (!place) {
+      if (hasCoordinates) {
+        // The label is enrichment. Conditions at the right spot matter far
+        // more than a name for it, so a failed reverse lookup degrades to an
+        // unlabelled reading rather than failing the whole tool.
+        try {
+          place = await reverseGeocode(latitude, longitude);
+
+          await ctx.runMutation(internal.environment.writeGeocodeCache, {
+            query,
+            ...place,
+          });
+        } catch (error) {
+          console.warn(
+            "Reverse geocoding failed; continuing unlabelled:",
+            error,
+          );
+
+          place = { locationName: "", latitude, longitude };
+        }
+      } else {
+        place = await geocodeLocation(location!);
+
+        await ctx.runMutation(internal.environment.writeGeocodeCache, {
+          query,
+          ...place,
+        });
+      }
     }
 
     const conditions = await fetchConditions(place.latitude, place.longitude);

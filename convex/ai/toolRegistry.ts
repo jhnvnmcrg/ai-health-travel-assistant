@@ -11,7 +11,9 @@ export const toolRegistry: Record<string, ToolExecutor> = {
     return await ctx.runAction(
       internal.environment.fetchLocationEnvironmentData,
       {
-        location: args.location as string,
+        location: args.location as string | undefined,
+        latitude: args.latitude as number | undefined,
+        longitude: args.longitude as number | undefined,
       },
     );
   },

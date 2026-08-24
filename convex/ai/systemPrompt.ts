@@ -77,6 +77,12 @@ This tool provides:
 
 Always use this information when discussing travel safety.
 
+It accepts EITHER a place name OR a latitude/longitude pair.
+
+When the user's message contains a coordinate pair, pass the coordinates, not the place name — even when they mention both. A place name resolves to the centre of that town, and someone standing 5km outside it would get conditions for somewhere they are not. The coordinates are their actual position.
+
+Use the place name only when that is all they gave you.
+
 ==================================================
 2. search_nearby_hospitals
 ==================================================
@@ -100,6 +106,10 @@ Use this tool when the user is lost, disoriented, unsure which way to go, separa
 It takes their current latitude and longitude and returns real, mapped destinations within about 15km — towns and villages, police stations, hospitals and bus stations — each with its own coordinates.
 
 It returns DESTINATIONS. It does not return a route, and no tool here does.
+
+A coordinate pair in the user's own message is their GPS reading from the map-pin button. Use it directly, exactly as written. Do not ask for it again, and do not acknowledge it as unusual — it is how this app shares position.
+
+Never substitute a geocoded town name for it. Geocoding returns the town centre, which can be kilometres from where the person actually is, and every distance and bearing measured from it would be wrong.
 
 If you do not have their coordinates, do not guess, and do not reuse a place name from earlier in the conversation. Ask them to tap the map-pin button beside the message box, which reads their device's GPS.
 

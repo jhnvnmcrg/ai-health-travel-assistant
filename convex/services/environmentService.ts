@@ -143,3 +143,53 @@ export async function fetchConditions(
     pm10: readNumber(air.current?.pm10),
   };
 }
+
+/**
+ * Turns coordinates into the geocoder's own name for that spot.
+ *
+ * The returned coordinates are the ones passed **in**, not Nominatim's. The
+ * whole point of the coordinate path is conditions where the person actually
+ * is; snapping to the town centre Nominatim reports would throw that away and
+ * reintroduce exactly the error the map-pin button exists to avoid.
+ *
+ * `zoom=12` asks for town/municipality granularity — a useful label, rather
+ * than a street address nobody needs on a metric strip.
+ */
+export async function reverseGeocode(
+  latitude: number,
+  longitude: number,
+): Promise<GeocodeResult> {
+  const response = await fetch(
+    `https://nominatim.openstreetmap.org/reverse?format=json&zoom=12&lat=${latitude}&lon=${longitude}`,
+    {
+      headers: {
+        "User-Agent": "HealthTravelPH/1.0",
+      },
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error("The location lookup service is temporarily unavailable.");
+  }
+
+  const json = await response.json();
+  const address = (json?.address ?? {}) as Record<string, unknown>;
+
+  const candidates = [
+    json?.name,
+    address.city,
+    address.town,
+    address.village,
+    address.municipality,
+    address.county,
+    address.state,
+  ];
+
+  const locationName =
+    candidates.find(
+      (value): value is string =>
+        typeof value === "string" && value.trim() !== "",
+    ) ?? "";
+
+  return { locationName: locationName.trim(), latitude, longitude };
+}
