@@ -3,13 +3,14 @@ import { Text } from "@/components/ui/text";
 import { VStack } from "@/components/ui/vstack";
 import type { Doc } from "@/convex/_generated/dataModel";
 import { SafePlaces } from "./SafePlaces";
+import { DestinationCard } from "./DestinationCard";
 
 type ChatMessageProps = {
   message: Doc<"messages">;
 };
 
 export function ChatMessage({ message }: ChatMessageProps) {
-  const { role, text, status, safePlaces } = message;
+  const { role, text, status, safePlaces, destinationPin } = message;
 
   if (status === "error") {
     return (
@@ -74,6 +75,14 @@ export function ChatMessage({ message }: ChatMessageProps) {
         {safePlaces && safePlaces.places.length > 0 && (
           <SafePlaces safePlaces={safePlaces} />
         )}
+
+        {/*
+         * Never both: convex/ai/orchestrator.ts drops the destination pin
+         * whenever the turn also went looking for refuges. "Head here for
+         * safety" above "here is your route to the beach" is the mixed
+         * message that gets somebody hurt.
+         */}
+        {destinationPin && <DestinationCard destinationPin={destinationPin} />}
       </VStack>
     </Box>
   );

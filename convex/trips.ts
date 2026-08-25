@@ -223,6 +223,7 @@ export const sendTripReminder = internalAction({
         ),
         nearbyHospitals: run.hospitals,
         safePlaces: run.safePlaces,
+        destinationPin: run.destinationPin,
       });
 
       await ctx.runAction(internal.push.sendTripPush, {

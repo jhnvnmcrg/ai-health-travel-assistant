@@ -4,35 +4,12 @@ import {
   internalQuery,
 } from "./_generated/server";
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
+import { resolveCoordinates, resolveNamedPlace } from "./lib/placeResolver";
 import {
   fetchConditions,
-  geocodeLocation,
-  reverseGeocode,
   type EnvironmentReading,
   type GeocodeResult,
 } from "./services/environmentService";
-
-/** Place coordinates do not move. The cache exists for Nominatim, not freshness. */
-const GEOCODE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-
-function normalizeQuery(location: string): string {
-  return location.trim().toLowerCase().replace(/\s+/g, " ");
-}
-
-/**
- * Cache key for a reverse lookup, rounded to ~110m.
- *
- * The rounding is what makes the cache work at all: raw GPS readings never
- * repeat, so an exact key would miss every single time and hit Nominatim on
- * every request. Place names do not change across 110m, so nothing is lost.
- *
- * Prefixed so it can never collide with a forward lookup for somewhere that
- * happens to be named like a coordinate pair.
- */
-function reverseQueryKey(latitude: number, longitude: number): string {
-  return `reverse:${latitude.toFixed(3)},${longitude.toFixed(3)}`;
-}
 
 type CachedGeocode = GeocodeResult & { fetchedAt: number };
 
@@ -42,7 +19,8 @@ type CachedGeocode = GeocodeResult & { fetchedAt: number };
  * The freshness test deliberately does not live here: a query is not rerun
  * merely because time has advanced, so a `Date.now()` comparison inside one
  * can answer from a moment that has passed — and reading the clock in a query
- * costs cache reuse besides. Actions may read the clock freely.
+ * costs cache reuse besides. Actions may read the clock freely, and
+ * convex/lib/placeResolver.ts is where they do.
  */
 export const readGeocodeCache = internalQuery({
   args: {
@@ -61,6 +39,7 @@ export const readGeocodeCache = internalQuery({
 
     return {
       locationName: cached.locationName,
+      ...(cached.label ? { label: cached.label } : {}),
       latitude: cached.latitude,
       longitude: cached.longitude,
       fetchedAt: cached.fetchedAt,
@@ -72,6 +51,7 @@ export const writeGeocodeCache = internalMutation({
   args: {
     query: v.string(),
     locationName: v.string(),
+    label: v.optional(v.string()),
     latitude: v.number(),
     longitude: v.number(),
   },
@@ -85,6 +65,7 @@ export const writeGeocodeCache = internalMutation({
     const entry = {
       query: args.query,
       locationName: args.locationName,
+      label: args.label,
       latitude: args.latitude,
       longitude: args.longitude,
       fetchedAt: Date.now(),
@@ -128,54 +109,13 @@ export const fetchLocationEnvironmentData = internalAction({
       );
     }
 
-    const query = hasCoordinates
-      ? reverseQueryKey(latitude, longitude)
-      : normalizeQuery(location!);
+    const place = hasCoordinates
+      ? await resolveCoordinates(ctx, latitude, longitude)
+      : await resolveNamedPlace(ctx, location!);
 
-    const cached: CachedGeocode | null = await ctx.runQuery(
-      internal.environment.readGeocodeCache,
-      { query },
-    );
-
-    let place: GeocodeResult | null =
-      cached && Date.now() - cached.fetchedAt <= GEOCODE_TTL_MS ? cached : null;
-
-    // A cached reverse entry stores the rounded coordinates it was keyed on.
-    // Conditions must still be fetched for the exact position given.
-    if (place && hasCoordinates) {
-      place = { ...place, latitude, longitude };
-    }
-
-    if (!place) {
-      if (hasCoordinates) {
-        // The label is enrichment. Conditions at the right spot matter far
-        // more than a name for it, so a failed reverse lookup degrades to an
-        // unlabelled reading rather than failing the whole tool.
-        try {
-          place = await reverseGeocode(latitude, longitude);
-
-          await ctx.runMutation(internal.environment.writeGeocodeCache, {
-            query,
-            ...place,
-          });
-        } catch (error) {
-          console.warn(
-            "Reverse geocoding failed; continuing unlabelled:",
-            error,
-          );
-
-          place = { locationName: "", latitude, longitude };
-        }
-      } else {
-        place = await geocodeLocation(location!);
-
-        await ctx.runMutation(internal.environment.writeGeocodeCache, {
-          query,
-          ...place,
-        });
-      }
-    }
-
+    // Always the coordinates that came back from resolution, which for the
+    // coordinate path are the ones passed in — never Nominatim's snapped-to-
+    // town-centre ones, which would defeat the point of sharing a GPS fix.
     const conditions = await fetchConditions(place.latitude, place.longitude);
 
     return { ...place, ...conditions };

@@ -8,8 +8,10 @@
  * @module
  */
 
+import type * as ai_attribution from "../ai/attribution.js";
 import type * as ai_client from "../ai/client.js";
 import type * as ai_context from "../ai/context.js";
+import type * as ai_destinationTool from "../ai/destinationTool.js";
 import type * as ai_generate from "../ai/generate.js";
 import type * as ai_generateConversationTitle from "../ai/generateConversationTitle.js";
 import type * as ai_hospitalTool from "../ai/hospitalTool.js";
@@ -23,10 +25,12 @@ import type * as ai_tripTool from "../ai/tripTool.js";
 import type * as ai_types from "../ai/types.js";
 import type * as chat from "../chat.js";
 import type * as conversations from "../conversations.js";
+import type * as destination from "../destination.js";
 import type * as environment from "../environment.js";
 import type * as hospital from "../hospital.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_messagePayload from "../lib/messagePayload.js";
+import type * as lib_placeResolver from "../lib/placeResolver.js";
 import type * as messages from "../messages.js";
 import type * as push from "../push.js";
 import type * as safePlaces from "../safePlaces.js";
@@ -42,8 +46,10 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "ai/attribution": typeof ai_attribution;
   "ai/client": typeof ai_client;
   "ai/context": typeof ai_context;
+  "ai/destinationTool": typeof ai_destinationTool;
   "ai/generate": typeof ai_generate;
   "ai/generateConversationTitle": typeof ai_generateConversationTitle;
   "ai/hospitalTool": typeof ai_hospitalTool;
@@ -57,10 +63,12 @@ declare const fullApi: ApiFromModules<{
   "ai/types": typeof ai_types;
   chat: typeof chat;
   conversations: typeof conversations;
+  destination: typeof destination;
   environment: typeof environment;
   hospital: typeof hospital;
   "lib/auth": typeof lib_auth;
   "lib/messagePayload": typeof lib_messagePayload;
+  "lib/placeResolver": typeof lib_placeResolver;
   messages: typeof messages;
   push: typeof push;
   safePlaces: typeof safePlaces;

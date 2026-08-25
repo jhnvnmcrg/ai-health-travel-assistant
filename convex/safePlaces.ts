@@ -1,5 +1,6 @@
 import { internalAction } from "./_generated/server";
 import { v } from "convex/values";
+import { bearingInDegrees, compassDirection, distanceInKm } from "../lib/geo";
 
 const OVERPASS_ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
@@ -140,12 +141,40 @@ out center;
             return [];
           }
 
-          return [{ name, category, latitude, longitude }];
+          const origin = {
+            latitude: args.latitude,
+            longitude: args.longitude,
+          };
+
+          const place = { latitude, longitude };
+
+          // Measured here, not left to the model. The LOST OR DISORIENTED
+          // block authorises it to state a destination's straight-line
+          // distance and compass direction — and until this existed the tool
+          // returned coordinates only, so those numbers were invented. Doing
+          // the arithmetic server-side is the same rule the rest of the app
+          // follows: an LLM never re-types a measurement.
+          return [
+            {
+              name,
+              category,
+              latitude,
+              longitude,
+              distanceKm: Number(distanceInKm(origin, place).toFixed(1)),
+              direction: compassDirection(bearingInDegrees(origin, place)),
+            },
+          ];
         });
 
         return {
           origin: { latitude: args.latitude, longitude: args.longitude },
-          places: places.slice(0, MAX_RESULTS),
+          // Sorted before truncating, now that there is a distance to sort on.
+          // Overpass returns elements in its own order, so cutting the list at
+          // MAX_RESULTS could previously drop the nearest village and keep one
+          // fourteen kilometres away.
+          places: places
+            .sort((a, b) => a.distanceKm - b.distanceKm)
+            .slice(0, MAX_RESULTS),
         };
       } catch (error) {
         lastError = error instanceof Error ? error.message : String(error);

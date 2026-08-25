@@ -20,6 +20,7 @@ import {
   formatDistance,
   type Coordinates,
 } from "@/lib/geo";
+import { buildDirectionsUrl } from "@/lib/maps";
 
 type SafePlaceCategory = "town" | "police" | "hospital" | "transport";
 
@@ -37,7 +38,14 @@ type SafePlacesProps = {
   };
 };
 
-/** Beyond this, walking directions are the wrong default to hand someone. */
+/**
+ * Beyond this, walking directions are the wrong default to hand someone.
+ *
+ * Generous, because this card's reader is on foot by definition — lost, with
+ * no vehicle, choosing between walking and staying put. Past it no mode is
+ * asserted at all rather than "driving", which would assume a car they
+ * plainly do not have.
+ */
 const WALKING_LIMIT_KM = 6;
 
 const VISIBLE_COUNT = 4;
@@ -59,22 +67,16 @@ const CATEGORY_LABEL: Record<SafePlaceCategory, string> = {
 /**
  * Opens Google Maps directions to a destination.
  *
- * `origin` is deliberately omitted. Google Maps then routes from the device's
- * own live position, which is more current than anything we stored when the
- * reply was written — someone lost has probably kept moving since. The stored
- * origin is used only to describe distance and direction in the card.
- *
- * The `api=1` universal URL is handled by the Maps app on Android and iOS and
- * by the browser on web, so this needs no platform split.
+ * The URL carries no origin, so Maps routes from the device's own live
+ * position — more current than anything stored when the reply was written,
+ * since someone lost has probably kept moving. The stored origin is used
+ * only to describe distance and direction in the card. See lib/maps.ts.
  */
 function openDirections(place: SafePlace, distanceKm: number) {
-  const destination = `${place.latitude},${place.longitude}`;
-  const travelmode = distanceKm <= WALKING_LIMIT_KM ? "walking" : "driving";
-
-  const url =
-    `https://www.google.com/maps/dir/?api=1` +
-    `&destination=${encodeURIComponent(destination)}` +
-    `&travelmode=${travelmode}`;
+  const url = buildDirectionsUrl({
+    destination: place,
+    travelMode: distanceKm <= WALKING_LIMIT_KM ? "walking" : undefined,
+  });
 
   Linking.openURL(url).catch((error) => {
     console.error("Failed to open Google Maps:", error);

@@ -8,6 +8,7 @@ import { gemini } from "./client";
 import { environmentTool } from "./tools";
 import { hospitalTool } from "./hospitalTool";
 import { safePlacesTool } from "./safePlacesTool";
+import { destinationTool } from "./destinationTool";
 import { tripTool } from "./tripTool";
 import { readVerdictHeader, stripLeadingFence } from "./parseResponse";
 
@@ -99,6 +100,7 @@ export async function generateChatTurn(
                 environmentTool,
                 hospitalTool,
                 safePlacesTool,
+                destinationTool,
                 tripTool,
               ],
             },

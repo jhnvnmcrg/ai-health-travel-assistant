@@ -76,6 +76,41 @@ export const safePlacesValidator = v.object({
   ),
 });
 
+/**
+ * A destination the traveller asked the way to, as the geocoder resolved it,
+ * with the point it was measured from when they said where they were.
+ *
+ * A pin, never a path. No tool in this app returns a route and the model is
+ * forbidden from describing one — see the ROUTES AND DIRECTIONS block in
+ * convex/ai/systemPrompt.ts. components/DestinationCard.tsx measures the
+ * straight line and hands the navigating to Google Maps.
+ *
+ * `label` is the administrative trail — "Baguio, Benguet" — and it is the
+ * reason this is not just a name and two numbers. Dozens of Philippine places
+ * share a name, the geocoder picks one silently, and the province on screen is
+ * what lets the traveller catch it. `query` is what they actually called it,
+ * kept so the card can show both when they differ.
+ */
+export const destinationPinValidator = v.object({
+  destination: v.object({
+    name: v.string(),
+    label: v.optional(v.string()),
+    query: v.optional(v.string()),
+    latitude: v.number(),
+    longitude: v.number(),
+  }),
+
+  /** Absent whenever the traveller never said where they were starting. */
+  origin: v.optional(
+    v.object({
+      name: v.string(),
+      label: v.optional(v.string()),
+      latitude: v.number(),
+      longitude: v.number(),
+    }),
+  ),
+});
+
 export const messageStatusValidator = v.union(
   v.literal("sending"),
   v.literal("streaming"),
@@ -141,6 +176,7 @@ export default defineSchema({
     environmentalMetadata: v.optional(environmentalMetadataValidator),
     nearbyHospitals: v.optional(nearbyHospitalsValidator),
     safePlaces: v.optional(safePlacesValidator),
+    destinationPin: v.optional(destinationPinValidator),
 
     createdAt: v.number(),
   }).index("by_conversation", ["conversationId"]),
@@ -176,6 +212,12 @@ export default defineSchema({
     /** Lower-cased, whitespace-collapsed lookup string. */
     query: v.string(),
     locationName: v.string(),
+    /**
+     * The administrative trail beneath the name — "Baguio, Benguet". Optional
+     * because rows written before it existed do not carry one, and because a
+     * reverse lookup may have nothing administrative to report.
+     */
+    label: v.optional(v.string()),
     latitude: v.number(),
     longitude: v.number(),
     fetchedAt: v.number(),

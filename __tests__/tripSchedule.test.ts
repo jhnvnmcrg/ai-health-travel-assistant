@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   parseTripDate,
   philippineDateString,
+  philippineHour,
+  philippineTimeString,
   planTripReminder,
   reminderTimeUtcMs,
   startOfTripDayUtcMs,
@@ -123,5 +125,39 @@ describe("planTripReminder", () => {
       kind: "scheduled",
       remindAtMs: SEPT_10_18_00_PHT,
     });
+  });
+});
+
+describe("philippineTimeString / philippineHour", () => {
+  // 2026-09-10T16:00:00Z is exactly midnight on the 11th in Manila. An
+  // off-by-one here puts the after-dark rule on the wrong side of a whole day.
+  const MIDNIGHT_PHT = Date.UTC(2026, 8, 10, 16, 0, 0);
+
+  it("reads midnight in Manila from the previous UTC afternoon", () => {
+    expect(philippineTimeString(MIDNIGHT_PHT)).toBe("00:00");
+    expect(philippineHour(MIDNIGHT_PHT)).toBe(0);
+    expect(philippineDateString(MIDNIGHT_PHT)).toBe("2026-09-11");
+  });
+
+  it("reads one minute before midnight as the previous day", () => {
+    const justBefore = MIDNIGHT_PHT - 60 * 1000;
+
+    expect(philippineTimeString(justBefore)).toBe("23:59");
+    expect(philippineHour(justBefore)).toBe(23);
+    expect(philippineDateString(justBefore)).toBe("2026-09-10");
+  });
+
+  it("puts dusk in the evening rather than the morning", () => {
+    // 09:45Z is 17:45 in Manila — after sunset, and the case the walking
+    // suggestion has to refuse.
+    const dusk = Date.UTC(2026, 8, 11, 9, 45, 0);
+
+    expect(philippineTimeString(dusk)).toBe("17:45");
+    expect(philippineHour(dusk)).toBe(17);
+  });
+
+  it("pads single-digit hours and minutes", () => {
+    expect(philippineTimeString(Date.UTC(2026, 0, 1, 1, 5, 0))).toBe("09:05");
+    expect(philippineTimeString(Date.UTC(2026, 0, 1, 20, 3, 0))).toBe("04:03");
   });
 });

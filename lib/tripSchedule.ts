@@ -96,6 +96,35 @@ export function philippineDateString(nowMs: number): string {
   return `${year}-${month}-${day}`;
 }
 
+/**
+ * The hour of the Philippine day, 0-23.
+ *
+ * Split out from the time string because the two callers want different
+ * things: the system instruction shows the traveller's clock to the model,
+ * while components/DestinationCard.tsx only needs to know whether it is dark
+ * enough that suggesting a walk would be wrong.
+ */
+export function philippineHour(nowMs: number): number {
+  return new Date(nowMs + PH_UTC_OFFSET_HOURS * HOUR_MS).getUTCHours();
+}
+
+/**
+ * The Philippine wall clock as `HH:MM`.
+ *
+ * The model has had the date since trip reminders shipped and never the time,
+ * so it could not tell a 3pm walk from a 5:45pm one. In a country where sunset
+ * lands between about 5:30pm and 6:20pm all year with almost no twilight, and
+ * provincial roads have no lighting, that difference is the whole risk.
+ */
+export function philippineTimeString(nowMs: number): string {
+  const shifted = new Date(nowMs + PH_UTC_OFFSET_HOURS * HOUR_MS);
+
+  const hours = String(shifted.getUTCHours()).padStart(2, "0");
+  const minutes = String(shifted.getUTCMinutes()).padStart(2, "0");
+
+  return `${hours}:${minutes}`;
+}
+
 export type TripScheduling =
   | { kind: "scheduled"; remindAtMs: number }
   | { kind: "too-late"; reason: string }

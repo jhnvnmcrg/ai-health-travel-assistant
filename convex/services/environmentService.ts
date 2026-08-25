@@ -7,6 +7,18 @@ import { calculateHeatIndex } from "../utils/heatIndex";
  */
 export type GeocodeResult = {
   locationName: string;
+  /**
+   * The administrative trail beneath the name — "Baguio, Benguet".
+   *
+   * The most important string on a destination card in this country. There are
+   * dozens of San Jose, Santa Cruz, Poblacion and Rizal Street; Nominatim
+   * picks one of them silently, and the name on its own cannot tell a
+   * traveller in Batangas that they have been handed the Nueva Ecija one.
+   *
+   * Optional because a reverse lookup may have nothing administrative to say,
+   * and because cache rows written before this existed do not carry it.
+   */
+  label?: string;
   latitude: number;
   longitude: number;
 };
@@ -42,15 +54,55 @@ function readNumber(value: unknown): number | undefined {
 }
 
 /**
- * Nominatim's usage policy caps callers at roughly one request a second and
- * asks that results be cached. convex/environment.ts caches these, which is
- * why this is split out from the live conditions below.
+ * How many segments of Nominatim's `display_name` are kept as the label.
+ * Two reads as "Baguio, Benguet" — enough to place somewhere, short enough to
+ * sit on one line of a card.
  */
-export async function geocodeLocation(
+const LABEL_SEGMENTS = 2;
+
+/**
+ * The administrative trail beneath a matched place, from `display_name`.
+ *
+ * The name itself, the postcode and the country are dropped — they are either
+ * already on screen or the same for everything this app can return. Region
+ * names are dropped too when a province survives without them, because the
+ * province is what a traveller recognises.
+ *
+ * Only regions with "Region" in the name are caught, so Central Luzon,
+ * Calabarzon and Mimaropa survive as a second segment. That is left alone
+ * deliberately rather than fixed with a hardcoded list of the seventeen: the
+ * province always leads, which is the segment that actually disambiguates, and
+ * a stale list would fail silently the first time one was renamed.
+ */
+export function administrativeLabel(displayName: string, name: string): string {
+  const parts = displayName
+    .split(",")
+    .map((part) => part.trim())
+    .filter(
+      (part) =>
+        part !== "" &&
+        part !== name &&
+        !/^\d+$/.test(part) &&
+        part.toLowerCase() !== "philippines",
+    );
+
+  const withoutRegions = parts.filter((part) => !/\bregion\b/i.test(part));
+
+  const chosen = withoutRegions.length > 0 ? withoutRegions : parts;
+
+  return chosen.slice(0, LABEL_SEGMENTS).join(", ");
+}
+
+async function nominatimSearch(
   location: string,
-): Promise<GeocodeResult> {
-  const geoResponse = await fetch(
-    `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(
+  limit: number,
+): Promise<unknown[]> {
+  const response = await fetch(
+    // `countrycodes` is a filter; the ", Philippines" suffix is only a ranking
+    // hint, and on its own it lets a foreign match through with full
+    // confidence. Both are kept — the filter for correctness, the suffix
+    // because it still improves the ordering within the country.
+    `https://nominatim.openstreetmap.org/search?format=json&countrycodes=ph&limit=${limit}&q=${encodeURIComponent(
       `${location}, Philippines`,
     )}`,
     {
@@ -64,31 +116,95 @@ export async function geocodeLocation(
   // to be worth reading: which of the two failures happened, and what was
   // searched for. "Location not found: Bagiuo" is enough for the model to
   // suggest the spelling the user probably meant.
-  if (!geoResponse.ok) {
+  if (!response.ok) {
     throw new Error("The location lookup service is temporarily unavailable.");
   }
 
-  const geo = await geoResponse.json();
+  const geo = await response.json();
 
   if (!Array.isArray(geo) || geo.length === 0) {
     throw new Error(`Location not found: ${location}`);
   }
 
-  const latitude = Number(geo[0].lat);
-  const longitude = Number(geo[0].lon);
+  return geo;
+}
+
+function readCandidate(
+  entry: unknown,
+  fallbackName: string,
+): GeocodeResult | null {
+  const record = (entry ?? {}) as Record<string, unknown>;
+
+  const latitude = Number(record.lat);
+  const longitude = Number(record.lon);
 
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return null;
+  }
+
+  const displayName =
+    typeof record.display_name === "string" ? record.display_name : "";
+
+  const locationName =
+    (typeof record.name === "string" && record.name) ||
+    displayName.split(",")[0].trim() ||
+    fallbackName;
+
+  const label = administrativeLabel(displayName, locationName);
+
+  return {
+    locationName,
+    ...(label ? { label } : {}),
+    latitude,
+    longitude,
+  };
+}
+
+/**
+ * Nominatim's usage policy caps callers at roughly one request a second and
+ * asks that results be cached. convex/lib/placeResolver.ts caches these, which
+ * is why this is split out from the live conditions below.
+ */
+export async function geocodeLocation(
+  location: string,
+): Promise<GeocodeResult> {
+  const [first] = await nominatimSearch(location, 1);
+
+  const place = readCandidate(first, location);
+
+  if (!place) {
     throw new Error("Geocoder returned coordinates that could not be read.");
   }
 
-  const displayName: string =
-    typeof geo[0].display_name === "string" ? geo[0].display_name : "";
-  const locationName: string =
-    (typeof geo[0].name === "string" && geo[0].name) ||
-    displayName.split(",")[0].trim() ||
-    location;
+  return place;
+}
 
-  return { locationName, latitude, longitude };
+/**
+ * The top few matches for a name, so a caller can tell whether the geocoder
+ * had a real choice to make.
+ *
+ * Only convex/destination.ts wants this. The environment tool is content with
+ * the best match: being a few kilometres off changes a temperature reading
+ * very little, whereas being in the wrong province sends somebody on a
+ * six-hundred-kilometre journey.
+ */
+export async function geocodeCandidates(
+  location: string,
+  limit: number,
+): Promise<GeocodeResult[]> {
+  const raw = await nominatimSearch(location, limit);
+
+  const places = raw.flatMap((entry) => {
+    const place = readCandidate(entry, location);
+
+    return place ? [place] : [];
+  });
+
+  if (places.length === 0) {
+    throw new Error("Geocoder returned coordinates that could not be read.");
+  }
+
+  return places;
 }
 
 /** Live weather, air quality and elevation. Deliberately not cached. */
@@ -185,11 +301,25 @@ export async function reverseGeocode(
     address.state,
   ];
 
-  const locationName =
-    candidates.find(
-      (value): value is string =>
-        typeof value === "string" && value.trim() !== "",
-    ) ?? "";
+  const readString = (value: unknown): string =>
+    typeof value === "string" ? value.trim() : "";
 
-  return { locationName: locationName.trim(), latitude, longitude };
+  const locationName =
+    candidates.map(readString).find((value) => value !== "") ?? "";
+
+  // The province, and the region only if there is no province. Same job as the
+  // label on a forward lookup: it is what tells someone the pin landed in the
+  // wrong part of the country.
+  const label = [address.province, address.state, address.region]
+    .map(readString)
+    .filter((value) => value !== "" && value !== locationName)
+    .slice(0, 1)
+    .join(", ");
+
+  return {
+    locationName,
+    ...(label ? { label } : {}),
+    latitude,
+    longitude,
+  };
 }

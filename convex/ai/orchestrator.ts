@@ -12,11 +12,13 @@ import { parseAIResponse } from "./parseResponse";
 import { buildSystemInstruction } from "./systemPrompt";
 import type { AIResponse, Hospital } from "./types";
 import { toolRegistry } from "./toolRegistry";
+import { pickDestinationPin } from "./attribution";
 
 const MAX_TOOL_ROUNDS = 4;
 const ENVIRONMENT_TOOL = "fetch_location_environment_data";
 const HOSPITAL_TOOL = "search_nearby_hospitals";
 const SAFE_PLACES_TOOL = "find_safe_places";
+const DESTINATION_TOOL = "show_destination_on_map";
 
 /**
  * ~2km. This compares one tool's output against another tool's arguments, so
@@ -47,6 +49,23 @@ export type SafePlacesResult = {
   places: SafePlace[];
 };
 
+/** One end of a journey, as the geocoder resolved it. */
+export type PinEnd = {
+  name: string;
+  /** The administrative trail — "Baguio, Benguet". */
+  label?: string;
+  latitude: number;
+  longitude: number;
+};
+
+export type DestinationPin = {
+  destination: PinEnd & {
+    /** What the traveller called it, when they named it rather than pinning it. */
+    query?: string;
+  };
+  origin?: PinEnd;
+};
+
 export type AssistantRun = {
   response: AIResponse;
   /**
@@ -61,6 +80,11 @@ export type AssistantRun = {
    * geocode, so this cannot lean on `environment` for its origin.
    */
   safePlaces?: SafePlacesResult;
+  /**
+   * Somewhere the traveller asked the way to. A pin, never a path — nothing in
+   * this app produces a route.
+   */
+  destinationPin?: DestinationPin;
 };
 
 function readNumber(value: unknown): number | undefined {
@@ -185,6 +209,64 @@ function readSafePlaces(
   return { origin: { latitude, longitude }, places };
 }
 
+function readPinEnd(value: unknown): PinEnd | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  const latitude = readNumber(record.latitude);
+  const longitude = readNumber(record.longitude);
+
+  if (latitude === undefined || longitude === undefined) {
+    return null;
+  }
+
+  const label = typeof record.label === "string" ? record.label.trim() : "";
+
+  // The geocoder's own strings, both allowed to be empty — a reverse lookup
+  // that found no name still leaves a usable point, and the card falls back to
+  // showing coordinates.
+  return {
+    name: typeof record.name === "string" ? record.name.trim() : "",
+    ...(label ? { label } : {}),
+    latitude,
+    longitude,
+  };
+}
+
+/**
+ * Read from the tool's RESULT rather than its arguments, unlike
+ * `readSafePlaces` above. The arguments may be place names; only the result
+ * carries the point the geocoder actually matched, along with the province
+ * that lets the traveller tell it is the right one.
+ */
+function readDestinationPin(result: unknown): DestinationPin | null {
+  if (!result || typeof result !== "object") {
+    return null;
+  }
+
+  const record = result as Record<string, unknown>;
+
+  const destination = readPinEnd(record.destination);
+
+  if (!destination) {
+    return null;
+  }
+
+  const rawDestination = record.destination as Record<string, unknown>;
+  const query =
+    typeof rawDestination.query === "string" ? rawDestination.query.trim() : "";
+
+  const origin = readPinEnd(record.origin);
+
+  return {
+    destination: { ...destination, ...(query ? { query } : {}) },
+    ...(origin ? { origin } : {}),
+  };
+}
+
 /**
  * One card, so one search. Two `find_safe_places` calls in a turn would mean
  * two different origins, and a card that measures distances from the wrong one
@@ -279,6 +361,13 @@ export async function runHealthTravelAssistant(
   const readings: EnvironmentReading[] = [];
   const searches: HospitalSearch[] = [];
   const safePlaceSearches: SafePlacesResult[] = [];
+  const destinationPins: DestinationPin[] = [];
+
+  // Counted separately from the captured arrays, and incremented before each
+  // tool runs, so a call that threw still counts. See ./attribution.ts — a
+  // thrown tool captures nothing, which is precisely when these rules matter.
+  let destinationAttempts = 0;
+  let safePlaceAttempts = 0;
 
   while (true) {
     const turn = await generateChatTurn(contents, systemInstruction, onAdvice);
@@ -291,6 +380,11 @@ export async function runHealthTravelAssistant(
         environment,
         hospitals: pickHospitals(searches, environment),
         safePlaces: pickSafePlaces(safePlaceSearches),
+        destinationPin: pickDestinationPin(
+          destinationPins,
+          destinationAttempts,
+          safePlaceAttempts,
+        ),
       };
     }
 
@@ -310,6 +404,12 @@ export async function runHealthTravelAssistant(
 
       if (!tool) {
         throw new Error(`Unknown tool: ${toolName}`);
+      }
+
+      if (toolName === DESTINATION_TOOL) {
+        destinationAttempts += 1;
+      } else if (toolName === SAFE_PLACES_TOOL) {
+        safePlaceAttempts += 1;
       }
 
       const args = (functionCall.args ?? {}) as Record<string, unknown>;
@@ -356,6 +456,12 @@ export async function runHealthTravelAssistant(
 
         if (found) {
           safePlaceSearches.push(found);
+        }
+      } else if (toolName === DESTINATION_TOOL) {
+        const pin = readDestinationPin(result);
+
+        if (pin) {
+          destinationPins.push(pin);
         }
       } else if (toolName === HOSPITAL_TOOL) {
         const latitude = readNumber(args.latitude);

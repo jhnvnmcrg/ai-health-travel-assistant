@@ -45,6 +45,15 @@ export const toolRegistry: Record<string, ToolExecutor> = {
     });
   },
 
+  async show_destination_on_map(ctx, args) {
+    return await ctx.runAction(internal.destination.resolveDestination, {
+      origin: args.origin as string | undefined,
+      originLatitude: args.originLatitude as number | undefined,
+      originLongitude: args.originLongitude as number | undefined,
+      destination: args.destination as string | undefined,
+    });
+  },
+
   async save_trip(ctx, args, { conversationId }) {
     return await ctx.runMutation(internal.trips.saveTrip, {
       conversationId,
