@@ -5,5 +5,17 @@
     "paths": {
       "@/*": ["./*"]
     }
-  }
+  },
+  // Replaces expo/tsconfig.base's list rather than extending it, so its
+  // entries are repeated. marketing/ holds the Remotion video, which is a
+  // separate project with its own tsconfig and dependencies.
+  "exclude": [
+    "node_modules",
+    "babel.config.js",
+    "metro.config.js",
+    "jest.config.js",
+    "android",
+    "ios",
+    "marketing"
+  ]
 }

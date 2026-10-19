@@ -20,6 +20,8 @@ export default tseslint.config(
       "components/ui/**",
       ".agents/**",
       ".claude/**",
+      // The Remotion marketing video: its own project, its own toolchain.
+      "marketing/**",
     ],
   },
 
