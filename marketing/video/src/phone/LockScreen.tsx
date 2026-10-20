@@ -129,7 +129,7 @@ export const LockScreen: React.FC<{ notification: number }> = ({
         />
         <div style={{ flex: 1, color: "#1A1A1A" }}>
           <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <span style={{ fontSize: 15, fontWeight: 600 }}>AITravPH</span>
+            <span style={{ fontSize: 15, fontWeight: 600 }}>AITrav</span>
             <span style={{ fontSize: 14, color: "#6E6E6E" }}>now</span>
           </div>
           <div style={{ fontSize: 16, fontWeight: 600, marginTop: 2 }}>

@@ -10,12 +10,8 @@ import {
   useVertical,
 } from "../theme";
 
-const WORDMARK = "AITravPH".split("");
-
-/** "AITrav" in ink, "PH" in amber — the same split the end card uses. */
-export function wordmarkColor(index: number) {
-  return index >= 6 ? C.amber : C.ink;
-}
+/** The name as the video shows and says it; the end card uses it too. */
+export const WORDMARK = "AITrav";
 
 export const Logo: React.FC = () => {
   const t = useSeconds();
@@ -71,14 +67,14 @@ export const Logo: React.FC = () => {
           lineHeight: 1,
         }}
       >
-        {WORDMARK.map((ch, i) => {
+        {WORDMARK.split("").map((ch, i) => {
           const lp = p(t, 0.5 + i * 0.04, 0.6);
           return (
             <div key={i} style={{ overflow: "hidden", paddingBottom: 12 }}>
               <div
                 style={{
                   transform: `translateY(${(1 - lp) * 110}%)`,
-                  color: wordmarkColor(i),
+                  color: C.ink,
                 }}
               >
                 {ch}

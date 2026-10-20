@@ -5,18 +5,9 @@ import { Caption } from "./scenes/Caption";
 import { EndCard } from "./scenes/EndCard";
 import { Hook } from "./scenes/Hook";
 import { Logo } from "./scenes/Logo";
+import { Soundtrack } from "./Soundtrack";
 import { C, DURATION_S, FPS, UI, p, useSeconds } from "./theme";
-
-/** Scene timing, in seconds. Each scene's own clock starts at its `from`. */
-const S = {
-  hook: { from: 0, dur: 4.7 },
-  logo: { from: 4.5, dur: 3.2 },
-  phone: { from: 7.2, dur: 19.4 },
-  ask: { from: 7.8, dur: 6.8 },
-  lost: { from: 14.6, dur: 7.0 },
-  remind: { from: 21.6, dur: 4.5 },
-  end: { from: 26.0, dur: 4.0 },
-};
+import { SCENES as S } from "./timeline.ts";
 
 const Scene: React.FC<{
   name: string;
@@ -89,5 +80,7 @@ export const AITravPH: React.FC = () => (
     </Scene>
 
     <FadeToBlack />
+
+    <Soundtrack />
   </AbsoluteFill>
 );

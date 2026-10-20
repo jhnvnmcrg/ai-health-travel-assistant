@@ -7,7 +7,11 @@
     "lib": ["DOM", "ES2022"],
     "strict": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    // scripts/ runs under Node's own type stripping, which needs explicit
+    // .ts imports and rejects syntax it can't simply erase.
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true
   },
-  "include": ["src", "remotion.config.ts"]
+  "include": ["src", "scripts", "remotion.config.ts"]
 }

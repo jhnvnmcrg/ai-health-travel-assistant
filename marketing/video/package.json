@@ -1,21 +1,26 @@
 {
   "name": "aitravph-marketing-video",
   "private": true,
+  "type": "module",
   "scripts": {
     "studio": "remotion studio",
     "render": "remotion render AITravPH out/aitravph-30s.mp4",
     "render:vertical": "remotion render AITravPH-Vertical out/aitravph-30s-vertical.mp4",
     "icons": "node extract-icons.cjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "voiceover": "node scripts/voiceover.ts",
+    "music": "node scripts/music.ts"
   },
   "dependencies": {
     "@remotion/cli": "4.0.536",
     "@remotion/google-fonts": "4.0.536",
+    "@remotion/media": "4.0.536",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "remotion": "4.0.536"
   },
   "devDependencies": {
+    "@types/node": "~26.6.5",
     "@types/react": "~19.1.10",
     "typescript": "~5.9.2"
   }

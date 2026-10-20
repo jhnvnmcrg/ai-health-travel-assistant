@@ -10,7 +10,7 @@ import {
   useSeconds,
   useVertical,
 } from "../theme";
-import { wordmarkColor } from "./Logo";
+import { WORDMARK } from "./Logo";
 
 const FEATURES: { icon: IconName; label: string }[] = [
   { icon: "thermometer", label: "Live conditions" },
@@ -61,14 +61,14 @@ export const EndCard: React.FC = () => {
             lineHeight: 1,
           }}
         >
-          {"AITravPH".split("").map((ch, i) => {
+          {WORDMARK.split("").map((ch, i) => {
             const lp = p(t, 0.45 + i * 0.035, 0.6);
             return (
               <div key={i} style={{ overflow: "hidden", paddingBottom: 12 }}>
                 <div
                   style={{
                     transform: `translateY(${(1 - lp) * 110}%)`,
-                    color: wordmarkColor(i),
+                    color: C.ink,
                   }}
                 >
                   {ch}
